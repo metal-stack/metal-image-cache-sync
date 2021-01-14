@@ -174,7 +174,7 @@ func run() error {
 		return err
 	}
 
-	collector := metrics.MustMetrics(logger.Named("metrics"), driver, c)
+	collector := metrics.MustMetrics(logger.Named("metrics"), c)
 
 	dummyRegion := "dummy" // we don't use AWS S3, we don't need a proper region
 	ss, err := session.NewSession(&aws.Config{

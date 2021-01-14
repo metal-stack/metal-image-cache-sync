@@ -5,7 +5,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	metalgo "github.com/metal-stack/metal-go"
 	"github.com/metal-stack/metal-image-cache-sync/pkg/api"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
@@ -14,7 +13,6 @@ import (
 type Collector struct {
 	logger                    *zap.SugaredLogger
 	config                    *api.Config
-	driver                    *metalgo.Driver
 	cacheMissInc              func()
 	cacheSyncDownloadBytesAdd func(float64)
 	cacheSyncDownloadInc      func()
@@ -23,11 +21,10 @@ type Collector struct {
 	metalAPIImageCount        func(float64)
 }
 
-func MustMetrics(logger *zap.SugaredLogger, driver *metalgo.Driver, config *api.Config) *Collector {
+func MustMetrics(logger *zap.SugaredLogger, config *api.Config) *Collector {
 	c := &Collector{
 		logger: logger,
 		config: config,
-		driver: driver,
 	}
 
 	cacheSize := prometheus.NewGaugeFunc(prometheus.GaugeOpts{

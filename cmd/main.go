@@ -168,13 +168,13 @@ func run() error {
 		return err
 	}
 
-	collector := metrics.MustMetrics(logger.Named("metrics"), c)
-
 	driver, err := metalgo.NewDriver(c.MetalAPIEndpoint, "", c.MetalAPIHMAC, metalgo.AuthType("Metal-View"))
 	if err != nil {
 		logger.Errorw("cannot create metal-api client", "error", err)
 		return err
 	}
+
+	collector := metrics.MustMetrics(logger.Named("metrics"), c)
 
 	dummyRegion := "dummy" // we don't use AWS S3, we don't need a proper region
 	ss, err := session.NewSession(&aws.Config{
@@ -194,7 +194,7 @@ func run() error {
 	s3Client := s3.New(ss)
 	s3Downloader := s3manager.NewDownloader(ss)
 
-	lister = synclister.NewSyncLister(logger.Named("sync-lister"), driver, s3Client, c)
+	lister = synclister.NewSyncLister(logger.Named("sync-lister"), driver, s3Client, collector, c)
 
 	syncer, err = sync.NewSyncer(logger.Named("syncer"), fs, s3Downloader, c, collector, stop)
 	if err != nil {

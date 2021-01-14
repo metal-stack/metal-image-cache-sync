@@ -9,6 +9,7 @@ import (
 
 	"github.com/aws/aws-sdk-go/service/s3"
 	metalgo "github.com/metal-stack/metal-go"
+	"github.com/metal-stack/metal-image-cache-sync/cmd/internal/metrics"
 	"github.com/metal-stack/metal-image-cache-sync/pkg/api"
 	"github.com/metal-stack/metal-image-cache-sync/pkg/utils"
 	"github.com/pkg/errors"
@@ -21,15 +22,17 @@ type SyncLister struct {
 	config       *api.Config
 	s3           *s3.S3
 	excludePaths []string
+	collector    *metrics.Collector
 }
 
-func NewSyncLister(logger *zap.SugaredLogger, driver *metalgo.Driver, s3 *s3.S3, config *api.Config) *SyncLister {
+func NewSyncLister(logger *zap.SugaredLogger, driver *metalgo.Driver, s3 *s3.S3, collector *metrics.Collector, config *api.Config) *SyncLister {
 	return &SyncLister{
 		logger:       logger,
 		driver:       driver,
 		config:       config,
 		s3:           s3,
 		excludePaths: config.ExcludePaths,
+		collector:    collector,
 	}
 }
 
@@ -39,13 +42,15 @@ func (s *SyncLister) DetermineSyncList() ([]api.OS, error) {
 		return nil, errors.Wrap(err, "error listing images in s3")
 	}
 
-	apiImages, err := s.driver.ImageList()
+	resp, err := s.driver.ImageList()
 	if err != nil {
 		return nil, errors.Wrap(err, "error listing images")
 	}
 
+	s.collector.SetMetalAPIImageCount(len(resp.Image))
+
 	images := api.OSImagesByOS{}
-	for _, img := range apiImages.Image {
+	for _, img := range resp.Image {
 		skip := false
 		for _, exclude := range s.excludePaths {
 			if strings.Contains(img.URL, exclude) {
@@ -145,6 +150,8 @@ func (s *SyncLister) DetermineSyncList() ([]api.OS, error) {
 			break
 		}
 	}
+
+	s.collector.SetUnsyncedImageCount(len(resp.Image) - len(syncImages))
 
 	return syncImages, nil
 }

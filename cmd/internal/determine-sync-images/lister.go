@@ -198,16 +198,18 @@ func (s *SyncLister) reduce(images []api.OS, sizeCount int64) ([]api.OS, int64, 
 }
 
 func (s *SyncLister) retrieveImagesFromS3() (map[string]s3.Object, error) {
-	objects, err := s.s3.ListObjects(&s3.ListObjectsInput{
+	res := map[string]s3.Object{}
+
+	err := s.s3.ListObjectsPages(&s3.ListObjectsInput{
 		Bucket: &s.config.ImageBucket,
+	}, func(objects *s3.ListObjectsOutput, lastPage bool) bool {
+		for _, o := range objects.Contents {
+			res[*o.Key] = *o
+		}
+		return true
 	})
 	if err != nil {
 		return nil, errors.Wrap(err, "cannot list s3 objects")
-	}
-
-	res := map[string]s3.Object{}
-	for _, o := range objects.Contents {
-		res[*o.Key] = *o
 	}
 
 	return res, nil

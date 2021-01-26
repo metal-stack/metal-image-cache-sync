@@ -17,23 +17,20 @@ import (
 )
 
 type SyncLister struct {
-	logger          *zap.SugaredLogger
-	driver          *metalgo.Driver
-	config          *api.Config
-	s3              *s3.S3
-	excludePaths    []string
-	expirationGrace int
-	collector       *metrics.Collector
+	logger    *zap.SugaredLogger
+	driver    *metalgo.Driver
+	config    *api.Config
+	s3        *s3.S3
+	collector *metrics.Collector
 }
 
 func NewSyncLister(logger *zap.SugaredLogger, driver *metalgo.Driver, s3 *s3.S3, collector *metrics.Collector, config *api.Config) *SyncLister {
 	return &SyncLister{
-		logger:          logger,
-		driver:          driver,
-		s3:              s3,
-		excludePaths:    config.ExcludePaths,
-		expirationGrace: config.ExpirationGrace,
-		collector:       collector,
+		logger:    logger,
+		driver:    driver,
+		config:    config,
+		s3:        s3,
+		collector: collector,
 	}
 }
 
@@ -53,7 +50,7 @@ func (s *SyncLister) DetermineSyncList() ([]api.OS, error) {
 	images := api.OSImagesByOS{}
 	for _, img := range resp.Image {
 		skip := false
-		for _, exclude := range s.excludePaths {
+		for _, exclude := range s.config.ExcludePaths {
 			if strings.Contains(img.URL, exclude) {
 				skip = true
 				break
@@ -66,7 +63,7 @@ func (s *SyncLister) DetermineSyncList() ([]api.OS, error) {
 		}
 
 		if img.ExpirationDate != nil {
-			if time.Since(time.Time(*img.ExpirationDate)) > 24*time.Hour*time.Duration(s.expirationGrace) {
+			if time.Since(time.Time(*img.ExpirationDate)) > 24*time.Hour*time.Duration(s.config.ExpirationGrace) {
 				s.logger.Debugw("not considering expired image, skipping", "id", *img.ID)
 				continue
 			}

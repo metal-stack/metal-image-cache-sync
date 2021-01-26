@@ -33,8 +33,6 @@ import (
 const (
 	moduleName  = "metal-image-cache-sync"
 	cfgFileType = "yaml"
-
-	logLevelFlg = "log-level"
 )
 
 var (
@@ -52,8 +50,8 @@ var rootCmd = &cobra.Command{
 	SilenceErrors: true,
 	SilenceUsage:  true,
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
-		initLogging()
 		initConfig()
+		initLogging()
 		initSignalHandlers()
 		return nil
 	},
@@ -74,6 +72,7 @@ func main() {
 
 func init() {
 	rootCmd.Flags().String("bind-address", "127.0.0.1:3000", "http server bind address")
+	rootCmd.Flags().String("log-level", "info", "sets the application log level")
 
 	rootCmd.Flags().String("image-store", "metal-stack.io", "url to the image store")
 	rootCmd.Flags().String("image-store-bucket", "images", "bucket of the image store")
@@ -102,8 +101,8 @@ func init() {
 func initLogging() {
 	level := zap.InfoLevel
 
-	if viper.IsSet(logLevelFlg) {
-		err := level.UnmarshalText([]byte(viper.GetString(logLevelFlg)))
+	if viper.IsSet("log-level") {
+		err := level.UnmarshalText([]byte(viper.GetString("log-level")))
 		if err != nil {
 			log.Fatalf("can't initialize zap logger: %v", err)
 		}

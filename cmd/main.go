@@ -88,6 +88,8 @@ func init() {
 	rootCmd.Flags().Int("min-images-per-name", 3, "minimum amount of images to keep of an image variant")
 	rootCmd.Flags().Int("max-images-per-name", -1, "maximum amount of images to cache for an image variant, unlimited if less than zero")
 
+	rootCmd.Flags().Duration("expiration-grace-period", 0, "the duration to still sync images even if they have already expired in the metal-api (defaults to zero)")
+
 	rootCmd.Flags().String("root-path", "/var/lib/metal-image-cache-sync/images", "root path of where to store the images")
 	rootCmd.Flags().StringSlice("excludes", []string{"/pull_requests/"}, "url paths to exclude from the sync")
 

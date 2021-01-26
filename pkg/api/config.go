@@ -2,6 +2,7 @@ package api
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/docker/go-units"
 	"github.com/pkg/errors"
@@ -27,6 +28,8 @@ type Config struct {
 	SyncSchedule string `validate:"required"`
 	DryRun       bool
 	ExcludePaths []string
+
+	ExpirationGrace time.Duration
 }
 
 func NewConfig() (*Config, error) {
@@ -42,6 +45,7 @@ func NewConfig() (*Config, error) {
 		SyncSchedule:       viper.GetString("schedule"),
 		DryRun:             viper.GetBool("dry-run"),
 		ExcludePaths:       viper.GetStringSlice("excludes"),
+		ExpirationGrace:    viper.GetDuration("expiration-grace-period"),
 	}
 
 	var err error
@@ -70,6 +74,10 @@ func (c *Config) Validate(fs afero.Fs) error {
 
 	if c.MinImagesPerName < 1 {
 		return fmt.Errorf("minimum images per name must be at least 1")
+	}
+
+	if c.ExpirationGrace < 0 {
+		return fmt.Errorf("expiration grace period must be >= 0")
 	}
 
 	return nil

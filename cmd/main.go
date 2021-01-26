@@ -129,7 +129,7 @@ func initConfig() {
 	if cfgFile != "" {
 		viper.SetConfigFile(cfgFile)
 		if err := viper.ReadInConfig(); err != nil {
-			logger.Fatalw("config file path set explicitly, but unreadable", "error", err)
+			log.Fatalf("config file path set explicitly, but unreadable: %v", err)
 		}
 	} else {
 		viper.SetConfigName("config")
@@ -139,14 +139,9 @@ func initConfig() {
 		if err := viper.ReadInConfig(); err != nil {
 			usedCfg := viper.ConfigFileUsed()
 			if usedCfg != "" {
-				logger.Fatalw("config file unreadable", "config-file", usedCfg, "error", err)
+				log.Fatalf("config file %s unreadable: %v", usedCfg, err)
 			}
 		}
-	}
-
-	usedCfg := viper.ConfigFileUsed()
-	if usedCfg != "" {
-		logger.Infow("read config file", "config-file", usedCfg)
 	}
 }
 

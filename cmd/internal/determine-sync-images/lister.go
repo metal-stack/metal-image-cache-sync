@@ -47,6 +47,8 @@ func (s *SyncLister) DetermineSyncList() ([]api.OS, error) {
 
 	s.collector.SetMetalAPIImageCount(len(resp.Image))
 
+	expirationGraceDays := 24 * time.Hour * time.Duration(s.config.ExpirationGraceDays)
+
 	images := api.OSImagesByOS{}
 	for _, img := range resp.Image {
 		skip := false
@@ -63,7 +65,7 @@ func (s *SyncLister) DetermineSyncList() ([]api.OS, error) {
 		}
 
 		if img.ExpirationDate != nil {
-			if time.Since(time.Time(*img.ExpirationDate)) > 24*time.Hour*time.Duration(s.config.ExpirationGrace) {
+			if time.Since(time.Time(*img.ExpirationDate)) > expirationGraceDays {
 				s.logger.Debugw("not considering expired image, skipping", "id", *img.ID)
 				continue
 			}

@@ -28,23 +28,23 @@ type Config struct {
 	DryRun       bool
 	ExcludePaths []string
 
-	ExpirationGrace int
+	ExpirationGraceDays int
 }
 
 func NewConfig() (*Config, error) {
 	c := &Config{
-		BindAddress:        viper.GetString("bind-address"),
-		ImageCacheRootPath: viper.GetString("root-path"),
-		MinImagesPerName:   viper.GetInt("min-images-per-name"),
-		MaxImagesPerName:   viper.GetInt("max-images-per-name"),
-		ImageStore:         viper.GetString("image-store"),
-		ImageBucket:        viper.GetString("image-store-bucket"),
-		MetalAPIEndpoint:   viper.GetString("metal-api-endpoint"),
-		MetalAPIHMAC:       viper.GetString("metal-api-hmac"),
-		SyncSchedule:       viper.GetString("schedule"),
-		DryRun:             viper.GetBool("dry-run"),
-		ExcludePaths:       viper.GetStringSlice("excludes"),
-		ExpirationGrace:    viper.GetInt("expiration-grace-period"),
+		BindAddress:         viper.GetString("bind-address"),
+		ImageCacheRootPath:  viper.GetString("root-path"),
+		MinImagesPerName:    viper.GetInt("min-images-per-name"),
+		MaxImagesPerName:    viper.GetInt("max-images-per-name"),
+		ImageStore:          viper.GetString("image-store"),
+		ImageBucket:         viper.GetString("image-store-bucket"),
+		MetalAPIEndpoint:    viper.GetString("metal-api-endpoint"),
+		MetalAPIHMAC:        viper.GetString("metal-api-hmac"),
+		SyncSchedule:        viper.GetString("schedule"),
+		DryRun:              viper.GetBool("dry-run"),
+		ExcludePaths:        viper.GetStringSlice("excludes"),
+		ExpirationGraceDays: viper.GetInt("expiration-grace-period"),
 	}
 
 	var err error
@@ -75,7 +75,7 @@ func (c *Config) Validate(fs afero.Fs) error {
 		return fmt.Errorf("minimum images per name must be at least 1")
 	}
 
-	if c.ExpirationGrace < 0 {
+	if c.ExpirationGraceDays < 0 {
 		return fmt.Errorf("expiration grace period must be >= 0")
 	}
 

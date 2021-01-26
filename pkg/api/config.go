@@ -2,7 +2,6 @@ package api
 
 import (
 	"fmt"
-	"time"
 
 	"github.com/docker/go-units"
 	"github.com/pkg/errors"
@@ -29,7 +28,7 @@ type Config struct {
 	DryRun       bool
 	ExcludePaths []string
 
-	ExpirationGrace time.Duration
+	ExpirationGrace int
 }
 
 func NewConfig() (*Config, error) {
@@ -45,7 +44,7 @@ func NewConfig() (*Config, error) {
 		SyncSchedule:       viper.GetString("schedule"),
 		DryRun:             viper.GetBool("dry-run"),
 		ExcludePaths:       viper.GetStringSlice("excludes"),
-		ExpirationGrace:    viper.GetDuration("expiration-grace-period"),
+		ExpirationGrace:    viper.GetInt("expiration-grace-period"),
 	}
 
 	var err error

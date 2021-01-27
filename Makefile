@@ -17,6 +17,7 @@ release:: all;
 .PHONY: start
 start: all
 	bin/metal-image-cache-sync \
+	#   --log-level debug \
 	  --metal-api-endpoint $(METAL_API_ENDPOINT) \
 	  --metal-api-hmac $(METAL_API_HMAC) \
 	  --max-cache-size 10G \

@@ -33,8 +33,6 @@ import (
 const (
 	moduleName  = "metal-image-cache-sync"
 	cfgFileType = "yaml"
-
-	logLevelFlg = "log-level"
 )
 
 var (
@@ -52,8 +50,8 @@ var rootCmd = &cobra.Command{
 	SilenceErrors: true,
 	SilenceUsage:  true,
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
-		initLogging()
 		initConfig()
+		initLogging()
 		initSignalHandlers()
 		return nil
 	},
@@ -74,6 +72,7 @@ func main() {
 
 func init() {
 	rootCmd.Flags().String("bind-address", "127.0.0.1:3000", "http server bind address")
+	rootCmd.Flags().String("log-level", "info", "sets the application log level")
 
 	rootCmd.Flags().String("image-store", "metal-stack.io", "url to the image store")
 	rootCmd.Flags().String("image-store-bucket", "images", "bucket of the image store")
@@ -88,6 +87,8 @@ func init() {
 	rootCmd.Flags().Int("min-images-per-name", 3, "minimum amount of images to keep of an image variant")
 	rootCmd.Flags().Int("max-images-per-name", -1, "maximum amount of images to cache for an image variant, unlimited if less than zero")
 
+	rootCmd.Flags().Uint("expiration-grace-period", 0, "the amount of days to still sync images even if they have already expired in the metal-api (defaults to zero)")
+
 	rootCmd.Flags().String("root-path", "/var/lib/metal-image-cache-sync/images", "root path of where to store the images")
 	rootCmd.Flags().StringSlice("excludes", []string{"/pull_requests/"}, "url paths to exclude from the sync")
 
@@ -100,8 +101,8 @@ func init() {
 func initLogging() {
 	level := zap.InfoLevel
 
-	if viper.IsSet(logLevelFlg) {
-		err := level.UnmarshalText([]byte(viper.GetString(logLevelFlg)))
+	if viper.IsSet("log-level") {
+		err := level.UnmarshalText([]byte(viper.GetString("log-level")))
 		if err != nil {
 			log.Fatalf("can't initialize zap logger: %v", err)
 		}
@@ -128,7 +129,7 @@ func initConfig() {
 	if cfgFile != "" {
 		viper.SetConfigFile(cfgFile)
 		if err := viper.ReadInConfig(); err != nil {
-			logger.Fatalw("config file path set explicitly, but unreadable", "error", err)
+			log.Fatalf("config file path set explicitly, but unreadable: %v", err)
 		}
 	} else {
 		viper.SetConfigName("config")
@@ -138,14 +139,9 @@ func initConfig() {
 		if err := viper.ReadInConfig(); err != nil {
 			usedCfg := viper.ConfigFileUsed()
 			if usedCfg != "" {
-				logger.Fatalw("config file unreadable", "config-file", usedCfg, "error", err)
+				log.Fatalf("config file %s unreadable: %v", usedCfg, err)
 			}
 		}
-	}
-
-	usedCfg := viper.ConfigFileUsed()
-	if usedCfg != "" {
-		logger.Infow("read config file", "config-file", usedCfg)
 	}
 }
 

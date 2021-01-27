@@ -27,21 +27,24 @@ type Config struct {
 	SyncSchedule string `validate:"required"`
 	DryRun       bool
 	ExcludePaths []string
+
+	ExpirationGraceDays uint
 }
 
 func NewConfig() (*Config, error) {
 	c := &Config{
-		BindAddress:        viper.GetString("bind-address"),
-		ImageCacheRootPath: viper.GetString("root-path"),
-		MinImagesPerName:   viper.GetInt("min-images-per-name"),
-		MaxImagesPerName:   viper.GetInt("max-images-per-name"),
-		ImageStore:         viper.GetString("image-store"),
-		ImageBucket:        viper.GetString("image-store-bucket"),
-		MetalAPIEndpoint:   viper.GetString("metal-api-endpoint"),
-		MetalAPIHMAC:       viper.GetString("metal-api-hmac"),
-		SyncSchedule:       viper.GetString("schedule"),
-		DryRun:             viper.GetBool("dry-run"),
-		ExcludePaths:       viper.GetStringSlice("excludes"),
+		BindAddress:         viper.GetString("bind-address"),
+		ImageCacheRootPath:  viper.GetString("root-path"),
+		MinImagesPerName:    viper.GetInt("min-images-per-name"),
+		MaxImagesPerName:    viper.GetInt("max-images-per-name"),
+		ImageStore:          viper.GetString("image-store"),
+		ImageBucket:         viper.GetString("image-store-bucket"),
+		MetalAPIEndpoint:    viper.GetString("metal-api-endpoint"),
+		MetalAPIHMAC:        viper.GetString("metal-api-hmac"),
+		SyncSchedule:        viper.GetString("schedule"),
+		DryRun:              viper.GetBool("dry-run"),
+		ExcludePaths:        viper.GetStringSlice("excludes"),
+		ExpirationGraceDays: viper.GetUint("expiration-grace-period"),
 	}
 
 	var err error

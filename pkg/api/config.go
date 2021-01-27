@@ -28,7 +28,7 @@ type Config struct {
 	DryRun       bool
 	ExcludePaths []string
 
-	ExpirationGraceDays int
+	ExpirationGraceDays uint
 }
 
 func NewConfig() (*Config, error) {
@@ -44,7 +44,7 @@ func NewConfig() (*Config, error) {
 		SyncSchedule:        viper.GetString("schedule"),
 		DryRun:              viper.GetBool("dry-run"),
 		ExcludePaths:        viper.GetStringSlice("excludes"),
-		ExpirationGraceDays: viper.GetInt("expiration-grace-period"),
+		ExpirationGraceDays: viper.GetUint("expiration-grace-period"),
 	}
 
 	var err error
@@ -73,10 +73,6 @@ func (c *Config) Validate(fs afero.Fs) error {
 
 	if c.MinImagesPerName < 1 {
 		return fmt.Errorf("minimum images per name must be at least 1")
-	}
-
-	if c.ExpirationGraceDays < 0 {
-		return fmt.Errorf("expiration grace period must be >= 0")
 	}
 
 	return nil

@@ -89,7 +89,17 @@ func init() {
 
 	rootCmd.Flags().Uint("expiration-grace-period", 0, "the amount of days to still sync images even if they have already expired in the metal-api (defaults to zero)")
 
-	rootCmd.Flags().String("root-path", "/var/lib/metal-image-cache-sync/images", "root path of where to store the images")
+	rootCmd.Flags().String("image-cache-path", "/var/lib/metal-image-cache-sync/images", "root path of where to store the images")
+	rootCmd.Flags().String("image-cache-serve-path", "/", "serve path on which to serve the images")
+
+	rootCmd.Flags().Bool("enable-kernel-cache", true, "enables caching kernels used for PXE booting inside partitions")
+	rootCmd.Flags().String("kernel-cache-path", "/var/lib/metal-image-cache-sync/kernels", "root path of where to store the boot kernels")
+	rootCmd.Flags().String("kernel-cache-serve-path", "/kernels", "serve path on which to serve the boot kernels")
+
+	rootCmd.Flags().Bool("enable-boot-image-cache", true, "enables caching initrd images used for PXE booting inside partitions")
+	rootCmd.Flags().String("boot-image-cache-path", "/var/lib/metal-image-cache-sync/boot-images", "root path of where to store the boot images")
+	rootCmd.Flags().String("boot-image-cache-serve-path", "/boot-images", "serve path on which to serve the boot images")
+
 	rootCmd.Flags().StringSlice("excludes", []string{"/pull_requests/"}, "url paths to exclude from the sync")
 
 	err := viper.BindPFlags(rootCmd.Flags())
@@ -203,7 +213,7 @@ func run() error {
 	))
 
 	id, err := cronjob.AddFunc(c.SyncSchedule, func() {
-		err := syncImages(driver)
+		err := runSync()
 		if err != nil {
 			logger.Errorw("error during sync", "error", err)
 		}
@@ -227,21 +237,19 @@ func run() error {
 			logger.Errorw("health endpoint could not write response body", "error", err)
 		}
 	})
-	serveDir := http.FileServer(http.Dir(c.ImageCacheRootPath))
-	router.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		logger.Infow("serving image cache download request", "url", r.URL.String(), "from", r.RemoteAddr)
-		hw := utils.NewHTTPStatusResponseWriter(w)
-		serveDir.ServeHTTP(hw, r)
-		switch code := hw.GetStatus(); code {
-		case http.StatusNotFound:
-			logger.Infow("cache miss", "url", r.URL.String())
-			collector.IncrementCacheMiss()
-		case http.StatusOK:
-			collector.IncrementDownloadedImages()
-		default:
-			logger.Infow("responded with error code for image download", "url", r.URL.String(), "code", code)
-		}
-	})
+
+	var handlers []cacheFileHandler
+	if c.KernelCacheEnabled {
+		handlers = append(handlers, newCacheFileHandler(c.KernelCacheServePath, c.ImageCacheRootPath, collector))
+	}
+	if c.BootImageCacheEnabled {
+		handlers = append(handlers, newCacheFileHandler(c.BootImageCacheServePath, c.BootImageCacheRootPath, collector))
+	}
+	handlers = append(handlers, newCacheFileHandler(c.ImageCacheServePath, c.ImageCacheRootPath, collector))
+
+	for _, h := range handlers {
+		router.HandleFunc(h.servePath, h.handle)
+	}
 
 	srv := &http.Server{
 		Addr:    c.BindAddress,
@@ -258,7 +266,7 @@ func run() error {
 		}
 	}()
 
-	err = syncImages(driver)
+	err = runSync()
 	if err != nil {
 		logger.Errorw("error during initial sync", "error", err)
 	}
@@ -277,15 +285,91 @@ func run() error {
 
 }
 
-func syncImages(driver *metalgo.Driver) error {
-	syncImages, err := lister.DetermineSyncList()
+type cacheFileHandler struct {
+	serveDir  http.Handler
+	servePath string
+	collector *metrics.Collector
+}
+
+func newCacheFileHandler(servePath, serveDir string, collector *metrics.Collector) cacheFileHandler {
+	return cacheFileHandler{
+		servePath: servePath,
+		serveDir:  http.FileServer(http.Dir(serveDir)),
+		collector: collector,
+	}
+}
+
+func (c *cacheFileHandler) handle(w http.ResponseWriter, r *http.Request) {
+	logger.Infow("serving cache download request", "url", r.URL.String(), "from", r.RemoteAddr)
+	hw := utils.NewHTTPStatusResponseWriter(w)
+	c.serveDir.ServeHTTP(hw, r)
+	switch code := hw.GetStatus(); code {
+	case http.StatusNotFound:
+		logger.Infow("cache miss", "url", r.URL.String())
+		c.collector.IncrementCacheMiss()
+	case http.StatusOK:
+		c.collector.IncrementDownloadedImages()
+	default:
+		logger.Infow("responded with error code for download", "url", r.URL.String(), "code", code)
+	}
+}
+
+func runSync() error {
+	var errs []error
+
+	err := func() error {
+		syncImages, err := lister.DetermineImageSyncList()
+		if err != nil {
+			return errors.Wrap(err, "cannot gather images")
+		}
+
+		err = syncer.SyncImages(syncImages)
+		if err != nil {
+			return errors.Wrap(err, "error during image sync")
+		}
+
+		return nil
+	}()
 	if err != nil {
-		return errors.Wrap(err, "cannot gather images")
+		errs = append(errs, err)
 	}
 
-	err = syncer.Sync(syncImages)
+	err = func() error {
+		syncKernels, err := lister.DetermineKernelSyncList()
+		if err != nil {
+			return errors.Wrap(err, "cannot kernel images")
+		}
+
+		err = syncer.SyncKernels(syncKernels)
+		if err != nil {
+			return errors.Wrap(err, "error during kernel sync")
+		}
+
+		return nil
+	}()
 	if err != nil {
-		return errors.Wrap(err, "error during image sync")
+		errs = append(errs, err)
+	}
+
+	err = func() error {
+		syncImages, err := lister.DetermineBootImageSyncList()
+		if err != nil {
+			return errors.Wrap(err, "cannot gather boot images")
+		}
+
+		err = syncer.SyncBootImages(syncImages)
+		if err != nil {
+			return errors.Wrap(err, "error during boot image sync")
+		}
+
+		return nil
+	}()
+	if err != nil {
+		errs = append(errs, err)
+	}
+
+	if len(errs) > 0 {
+		return errors.Errorf("errors occurred during sync: %v", errs)
 	}
 
 	return nil

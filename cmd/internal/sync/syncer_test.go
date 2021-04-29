@@ -336,7 +336,7 @@ func TestSyncer_defineImageDiff(t *testing.T) {
 				stop:       context.TODO(),
 			}
 
-			gotRemove, gotKeep, gotAdd, err := s.defineDiff(tt.currentImages, tt.wantImages)
+			gotRemove, gotKeep, gotAdd, err := s.defineDiff(cacheRoot, tt.currentImages, tt.wantImages)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("Syncer.defineImageDiff() error = %v, wantErr %v", err, tt.wantErr)
 				return

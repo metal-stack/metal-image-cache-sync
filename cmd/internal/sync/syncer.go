@@ -120,7 +120,7 @@ func (s *Syncer) SyncBootImages(imagesToSync []api.BootImage) error {
 }
 
 func (s *Syncer) sync(rootPath string, current api.CacheEntities, toSync api.CacheEntities) error {
-	remove, keep, add, err := s.defineDiff(current, toSync)
+	remove, keep, add, err := s.defineDiff(rootPath, current, toSync)
 	if err != nil {
 		return errors.Wrap(err, "error creating cache diff")
 	}
@@ -228,7 +228,7 @@ func (s *Syncer) currentBootImageIndex() (api.CacheEntities, error) {
 		size := info.Size()
 
 		result = append(result, api.BootImage{
-			Key:  p[len(s.kernelRoot)+1:],
+			Key:  p[len(s.bootImageRoot)+1:],
 			Size: size,
 		})
 
@@ -241,7 +241,7 @@ func (s *Syncer) currentBootImageIndex() (api.CacheEntities, error) {
 	return result, nil
 }
 
-func (s *Syncer) defineDiff(currentEntities api.CacheEntities, wantEntities api.CacheEntities) (remove api.CacheEntities, keep api.CacheEntities, add api.CacheEntities, err error) {
+func (s *Syncer) defineDiff(rootPath string, currentEntities api.CacheEntities, wantEntities api.CacheEntities) (remove api.CacheEntities, keep api.CacheEntities, add api.CacheEntities, err error) {
 	// define entities to add
 	for _, wantEntity := range wantEntities {
 		var existing api.CacheEntity
@@ -268,7 +268,7 @@ func (s *Syncer) defineDiff(currentEntities api.CacheEntities, wantEntities api.
 			continue
 		}
 
-		hash, err := s.fileMD5(strings.Join([]string{s.imageRoot, existing.GetPath()}, string(os.PathSeparator)))
+		hash, err := s.fileMD5(strings.Join([]string{rootPath, existing.GetPath()}, string(os.PathSeparator)))
 		if err != nil {
 			return nil, nil, nil, errors.Wrap(err, "error calculating hash sum of local file")
 		}

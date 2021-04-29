@@ -71,7 +71,6 @@ func main() {
 }
 
 func init() {
-	rootCmd.Flags().String("bind-address", "127.0.0.1:3000", "http server bind address")
 	rootCmd.Flags().String("log-level", "info", "sets the application log level")
 
 	rootCmd.Flags().String("image-store", "metal-stack.io", "url to the image store")
@@ -89,16 +88,16 @@ func init() {
 
 	rootCmd.Flags().Uint("expiration-grace-period", 0, "the amount of days to still sync images even if they have already expired in the metal-api (defaults to zero)")
 
+	rootCmd.Flags().String("image-cache-bind-address", "0.0.0.0:3000", "image cache http server bind address")
 	rootCmd.Flags().String("image-cache-path", "/var/lib/metal-image-cache-sync/images", "root path of where to store the images")
-	rootCmd.Flags().String("image-cache-serve-path", "/", "serve path on which to serve the images")
 
 	rootCmd.Flags().Bool("enable-kernel-cache", true, "enables caching kernels used for PXE booting inside partitions")
+	rootCmd.Flags().String("kernel-cache-bind-address", "0.0.0.0:3001", "kernel cache http server bind address")
 	rootCmd.Flags().String("kernel-cache-path", "/var/lib/metal-image-cache-sync/kernels", "root path of where to store the boot kernels")
-	rootCmd.Flags().String("kernel-cache-serve-path", "/kernels", "serve path on which to serve the boot kernels")
 
 	rootCmd.Flags().Bool("enable-boot-image-cache", true, "enables caching initrd images used for PXE booting inside partitions")
+	rootCmd.Flags().String("boot-image-cache-bind-address", "0.0.0.0:3002", "kernel cache http server bind address")
 	rootCmd.Flags().String("boot-image-cache-path", "/var/lib/metal-image-cache-sync/boot-images", "root path of where to store the boot images")
-	rootCmd.Flags().String("boot-image-cache-serve-path", "/boot-images", "serve path on which to serve the boot images")
 
 	rootCmd.Flags().StringSlice("excludes", []string{"/pull_requests/"}, "url paths to exclude from the sync")
 
@@ -180,7 +179,7 @@ func run() error {
 		return err
 	}
 
-	collector := metrics.MustMetrics(logger.Named("metrics"), c)
+	collector := metrics.MustMetrics(logger.Named("metrics"), c.ImageCacheRootPath)
 
 	dummyRegion := "dummy" // we don't use AWS S3, we don't need a proper region
 	ss, err := session.NewSession(&aws.Config{
@@ -226,45 +225,50 @@ func run() error {
 		return errors.Wrap(err, "could not initialize cron schedule")
 	}
 
-	logger.Infow("start metal stack image sync", "version", v.V.String())
-
-	router := http.NewServeMux()
-
-	router.Handle("/metrics", promhttp.Handler())
-	router.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
-		_, err := w.Write([]byte("HEALTHY"))
-		if err != nil {
-			logger.Errorw("health endpoint could not write response body", "error", err)
-		}
-	})
-
-	var handlers []cacheFileHandler
+	handlers := []cacheFileHandler{newCacheFileHandler(c.ImageCacheBindAddress, c.ImageCacheRootPath, collector)}
 	if c.KernelCacheEnabled {
-		handlers = append(handlers, newCacheFileHandler(c.KernelCacheServePath, c.ImageCacheRootPath, collector))
+		// TODO: own collector for kernels
+		handlers = append(handlers, newCacheFileHandler(c.KernelCacheBindAddress, c.KernelCacheRootPath, collector))
 	}
 	if c.BootImageCacheEnabled {
-		handlers = append(handlers, newCacheFileHandler(c.BootImageCacheServePath, c.BootImageCacheRootPath, collector))
+		// TODO: own collector for boot images
+		handlers = append(handlers, newCacheFileHandler(c.BootImageCacheBindAddress, c.BootImageCacheRootPath, collector))
 	}
-	handlers = append(handlers, newCacheFileHandler(c.ImageCacheServePath, c.ImageCacheRootPath, collector))
 
+	logger.Infow("start metal stack image sync", "version", v.V.String())
+
+	var srvs []*http.Server
 	for _, h := range handlers {
-		router.HandleFunc(h.servePath, h.handle)
-	}
+		h := h
+		router := http.NewServeMux()
 
-	srv := &http.Server{
-		Addr:    c.BindAddress,
-		Handler: router,
-	}
-
-	go func() {
-		logger.Infow("starting to serve files", "bind-address", c.BindAddress)
-		err := srv.ListenAndServe()
-		if err != nil {
-			if err != http.ErrServerClosed {
-				logger.Fatalw("error starting http server, shutting down...", "error", err)
+		router.Handle("/metrics", promhttp.Handler())
+		router.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+			_, err := w.Write([]byte("HEALTHY"))
+			if err != nil {
+				logger.Errorw("health endpoint could not write response body", "error", err)
 			}
+		})
+		router.HandleFunc("/", h.handle)
+
+		srv := http.Server{
+			Addr:    h.bindAddress,
+			Handler: router,
 		}
-	}()
+
+		srvs = append(srvs, &srv)
+
+		go func() {
+			logger.Infow("starting to serve files", "bind-address", h.bindAddress, "directory", h.serveDir)
+			err := srv.ListenAndServe()
+			if err != nil {
+				if err != http.ErrServerClosed {
+					logger.Fatalw("error starting http server, shutting down...", "error", err)
+				}
+			}
+		}()
+
+	}
 
 	err = runSync()
 	if err != nil {
@@ -276,9 +280,12 @@ func run() error {
 	<-stop.Done()
 	logger.Info("received stop signal, shutting down...")
 	cronjob.Stop()
-	err = srv.Close()
-	if err != nil {
-		logger.Errorw("error shutting down http server", "error", err)
+
+	for _, srv := range srvs {
+		err = srv.Close()
+		if err != nil {
+			logger.Errorw("error shutting down http server", "error", err)
+		}
 	}
 
 	return nil
@@ -286,29 +293,33 @@ func run() error {
 }
 
 type cacheFileHandler struct {
-	serveDir  http.Handler
-	servePath string
-	collector *metrics.Collector
+	serveDir     string
+	serveHandler http.Handler
+	collector    *metrics.Collector
+	bindAddress  string
 }
 
-func newCacheFileHandler(servePath, serveDir string, collector *metrics.Collector) cacheFileHandler {
+func newCacheFileHandler(bindAddr, serveDir string, collector *metrics.Collector) cacheFileHandler {
 	return cacheFileHandler{
-		servePath: servePath,
-		serveDir:  http.FileServer(http.Dir(serveDir)),
-		collector: collector,
+		serveDir:     serveDir,
+		serveHandler: http.FileServer(http.Dir(serveDir)),
+		collector:    collector,
+		bindAddress:  bindAddr,
 	}
 }
 
 func (c *cacheFileHandler) handle(w http.ResponseWriter, r *http.Request) {
 	logger.Infow("serving cache download request", "url", r.URL.String(), "from", r.RemoteAddr)
 	hw := utils.NewHTTPStatusResponseWriter(w)
-	c.serveDir.ServeHTTP(hw, r)
+	c.serveHandler.ServeHTTP(hw, r)
 	switch code := hw.GetStatus(); code {
 	case http.StatusNotFound:
 		logger.Infow("cache miss", "url", r.URL.String())
 		c.collector.IncrementCacheMiss()
 	case http.StatusOK:
 		c.collector.IncrementDownloadedImages()
+	case 0:
+		// occurs when just visting directories through browser
 	default:
 		logger.Infow("responded with error code for download", "url", r.URL.String(), "code", code)
 	}

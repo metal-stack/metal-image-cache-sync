@@ -5,14 +5,13 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/metal-stack/metal-image-cache-sync/pkg/api"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 )
 
 type Collector struct {
 	logger                    *zap.SugaredLogger
-	config                    *api.Config
+	rootPath                  string
 	cacheMissInc              func()
 	cacheSyncDownloadBytesAdd func(float64)
 	cacheSyncDownloadInc      func()
@@ -21,10 +20,10 @@ type Collector struct {
 	metalAPIImageCount        func(float64)
 }
 
-func MustMetrics(logger *zap.SugaredLogger, config *api.Config) *Collector {
+func MustMetrics(logger *zap.SugaredLogger, rootPath string) *Collector {
 	c := &Collector{
-		logger: logger,
-		config: config,
+		logger:   logger,
+		rootPath: rootPath,
 	}
 
 	cacheSize := prometheus.NewGaugeFunc(prometheus.GaugeOpts{
@@ -88,7 +87,7 @@ func MustMetrics(logger *zap.SugaredLogger, config *api.Config) *Collector {
 
 func (c *Collector) cacheDirSize() float64 {
 	var size int64
-	err := filepath.Walk(c.config.ImageCacheRootPath, func(_ string, info os.FileInfo, err error) error {
+	err := filepath.Walk(c.rootPath, func(_ string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}
@@ -107,7 +106,7 @@ func (c *Collector) cacheDirSize() float64 {
 
 func (c *Collector) cacheImageCount() float64 {
 	var count int64
-	err := filepath.Walk(c.config.ImageCacheRootPath, func(_ string, info os.FileInfo, err error) error {
+	err := filepath.Walk(c.rootPath, func(_ string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}

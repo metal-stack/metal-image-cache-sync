@@ -330,7 +330,7 @@ func (s *Syncer) download(ctx context.Context, rootPath string, e api.CacheEntit
 	}
 	defer f.Close()
 
-	s.logger.Infow("downloading file", "id", e.GetID(), "key", e.GetPath(), "size", e.GetSize(), "to", targetPath)
+	s.logger.Infow("downloading file", "id", e.GetName(), "key", e.GetPath(), "size", e.GetSize(), "to", targetPath)
 	n, err := e.Download(s.stop, f, s.s3)
 	if err != nil {
 		return err
@@ -349,7 +349,7 @@ func (s *Syncer) download(ctx context.Context, rootPath string, e api.CacheEntit
 	}
 	defer f.Close()
 
-	s.logger.Infow("downloading md5 checksum", "id", e.GetID(), "key", e.GetPath(), "to", md5TargetPath)
+	s.logger.Infow("downloading md5 checksum", "id", e.GetName(), "key", e.GetPath(), "to", md5TargetPath)
 	e.DownloadMD5(s.stop, &f, s.s3)
 	if err != nil {
 		return err
@@ -360,7 +360,7 @@ func (s *Syncer) download(ctx context.Context, rootPath string, e api.CacheEntit
 
 func (s *Syncer) remove(rootPath string, e api.CacheEntity) error {
 	path := strings.Join([]string{rootPath, e.GetPath()}, string(os.PathSeparator))
-	s.logger.Infow("removing file from disk", "path", e.GetPath(), "id", e.GetID())
+	s.logger.Infow("removing file from disk", "path", e.GetPath(), "id", e.GetName())
 	err := s.fs.Remove(path)
 	if err != nil {
 		s.logger.Errorw("error deleting file", "error", err)
@@ -385,11 +385,11 @@ func (s *Syncer) printSyncPlan(remove api.CacheEntities, keep []api.CacheEntity,
 	}
 	for _, e := range keep {
 		cacheSize += e.GetSize()
-		data = append(data, []string{e.GetID(), e.GetPath(), units.HumanSize(float64(e.GetSize())), "keep"})
+		data = append(data, []string{e.GetName(), e.GetPath(), units.HumanSize(float64(e.GetSize())), "keep"})
 	}
 	for _, e := range add {
 		cacheSize += e.GetSize()
-		data = append(data, []string{e.GetID(), e.GetPath(), units.HumanSize(float64(e.GetSize())), "download"})
+		data = append(data, []string{e.GetName(), e.GetPath(), units.HumanSize(float64(e.GetSize())), "download"})
 	}
 
 	s.logger.Infow("sync plan", "amount", len(keep)+len(add), "cache-size-after-sync", units.BytesSize(float64(cacheSize)))

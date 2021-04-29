@@ -10,7 +10,7 @@ import (
 type CacheEntities []CacheEntity
 
 type CacheEntity interface {
-	GetID() string
+	GetName() string
 	GetPath() string
 	GetSize() int64
 	HasMD5() bool

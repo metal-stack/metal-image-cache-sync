@@ -4,6 +4,9 @@ import (
 	"context"
 	"io"
 	"net/http"
+	"strings"
+
+	"github.com/Masterminds/semver"
 
 	"github.com/aws/aws-sdk-go/service/s3/s3manager"
 	"github.com/pkg/errors"
@@ -16,7 +19,14 @@ type Kernel struct {
 	Size int64
 }
 
-func (k Kernel) GetID() string {
+func (k Kernel) GetName() string {
+	// try to find a semver version somewhere in the path...
+	for _, p := range strings.Split(k.URL, "/") {
+		version, err := semver.NewVersion(strings.TrimPrefix(p, "v"))
+		if err == nil {
+			return version.String()
+		}
+	}
 	return k.URL
 }
 

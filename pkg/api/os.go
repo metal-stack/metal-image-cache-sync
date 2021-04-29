@@ -43,7 +43,7 @@ func (o *OS) MajorMinor() (string, error) {
 	return fmt.Sprintf("%d.%d", o.Version.Major(), o.Version.Minor()), nil
 }
 
-func (o OS) GetID() string {
+func (o OS) GetName() string {
 	if o.ApiRef.ID == nil {
 		return ""
 	}

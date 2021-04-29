@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/Masterminds/semver"
 	"github.com/aws/aws-sdk-go/service/s3/s3manager"
 	"github.com/pkg/errors"
 	"github.com/spf13/afero"
@@ -19,7 +20,14 @@ type BootImage struct {
 	Size int64
 }
 
-func (b BootImage) GetID() string {
+func (b BootImage) GetName() string {
+	// try to find a semver version somewhere in the path...
+	for _, p := range strings.Split(b.URL, "/") {
+		version, err := semver.NewVersion(strings.TrimPrefix(p, "v"))
+		if err == nil {
+			return version.String()
+		}
+	}
 	return b.URL
 }
 

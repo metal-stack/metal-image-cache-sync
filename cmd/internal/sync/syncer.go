@@ -73,7 +73,7 @@ func (s *Syncer) SyncImages(imagesToSync []api.OS) error {
 		toSync = append(toSync, i)
 	}
 
-	err = s.sync(current, toSync)
+	err = s.sync(s.imageRoot, current, toSync)
 	if err != nil {
 		return err
 	}
@@ -92,7 +92,7 @@ func (s *Syncer) SyncKernels(kernelsToSync []api.Kernel) error {
 		toSync = append(toSync, k)
 	}
 
-	err = s.sync(current, toSync)
+	err = s.sync(s.kernelRoot, current, toSync)
 	if err != nil {
 		return err
 	}
@@ -111,7 +111,7 @@ func (s *Syncer) SyncBootImages(imagesToSync []api.BootImage) error {
 		toSync = append(toSync, i)
 	}
 
-	err = s.sync(current, toSync)
+	err = s.sync(s.bootImageRoot, current, toSync)
 	if err != nil {
 		return err
 	}
@@ -119,10 +119,10 @@ func (s *Syncer) SyncBootImages(imagesToSync []api.BootImage) error {
 	return nil
 }
 
-func (s *Syncer) sync(current api.CacheEntities, toSync api.CacheEntities) error {
+func (s *Syncer) sync(rootPath string, current api.CacheEntities, toSync api.CacheEntities) error {
 	remove, keep, add, err := s.defineDiff(current, toSync)
 	if err != nil {
-		return errors.Wrap(err, "error creating image diff")
+		return errors.Wrap(err, "error creating cache diff")
 	}
 
 	s.printSyncPlan(remove, keep, add)
@@ -132,17 +132,17 @@ func (s *Syncer) sync(current api.CacheEntities, toSync api.CacheEntities) error
 		return nil
 	}
 
-	for _, image := range remove {
-		err := s.remove(s.imageRoot, image)
+	for _, e := range remove {
+		err := s.remove(rootPath, e)
 		if err != nil {
-			return fmt.Errorf("error deleting os image, retrying in next sync schedule: %v", err)
+			return fmt.Errorf("error deleting cached file, retrying in next sync schedule: %v", err)
 		}
 	}
 
-	for _, image := range add {
-		err := s.download(s.stop, image)
+	for _, e := range add {
+		err := s.download(s.stop, rootPath, e)
 		if err != nil {
-			return fmt.Errorf("error downloading os image, retrying in next sync schedule: %v", err)
+			return fmt.Errorf("error downloading file, retrying in next sync schedule: %v", err)
 		}
 	}
 
@@ -312,9 +312,9 @@ func (s *Syncer) fileMD5(filePath string) (string, error) {
 	return fmt.Sprintf("%x", hash.Sum(nil)), nil
 }
 
-func (s *Syncer) download(ctx context.Context, e api.CacheEntity) error {
-	targetPath := strings.Join([]string{s.imageRoot, e.GetPath()}, string(os.PathSeparator))
-	md5TargetPath := strings.Join([]string{s.imageRoot, e.GetPath() + ".md5"}, string(os.PathSeparator))
+func (s *Syncer) download(ctx context.Context, rootPath string, e api.CacheEntity) error {
+	targetPath := strings.Join([]string{rootPath, e.GetPath()}, string(os.PathSeparator))
+	md5TargetPath := strings.Join([]string{rootPath, e.GetPath() + ".md5"}, string(os.PathSeparator))
 
 	_ = s.fs.Remove(targetPath)
 	_ = s.fs.Remove(md5TargetPath)

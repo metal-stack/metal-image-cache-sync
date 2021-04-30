@@ -43,10 +43,17 @@ func (b BootImage) HasMD5() bool {
 	return true
 }
 
-func (b BootImage) DownloadMD5(ctx context.Context, target *afero.File, s3downloader *s3manager.Downloader) (string, error) {
+func (b BootImage) DownloadMD5(ctx context.Context, target *afero.File, c *http.Client, s3downloader *s3manager.Downloader) (string, error) {
 	md5URL := b.URL + ".md5"
 
-	resp, err := http.Get(md5URL)
+	req, err := http.NewRequest(http.MethodGet, md5URL, nil)
+	if err != nil {
+		return "", errors.Wrap(err, "unable to create get request")
+	}
+
+	req = req.WithContext(ctx)
+
+	resp, err := c.Do(req)
 	if err != nil {
 		return "", errors.Wrap(err, "boot image md5 download error")
 	}
@@ -74,8 +81,15 @@ func (b BootImage) DownloadMD5(ctx context.Context, target *afero.File, s3downlo
 	return parts[0], nil
 }
 
-func (b BootImage) Download(ctx context.Context, target afero.File, s3downloader *s3manager.Downloader) (int64, error) {
-	resp, err := http.Get(b.URL)
+func (b BootImage) Download(ctx context.Context, target afero.File, c *http.Client, s3downloader *s3manager.Downloader) (int64, error) {
+	req, err := http.NewRequest(http.MethodGet, b.URL, nil)
+	if err != nil {
+		return 0, errors.Wrap(err, "unable to create get request")
+	}
+
+	req = req.WithContext(ctx)
+
+	resp, err := c.Do(req)
 	if err != nil {
 		return 0, errors.Wrap(err, "boot image download error")
 	}

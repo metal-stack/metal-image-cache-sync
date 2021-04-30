@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"fmt"
+	"net/http"
 
 	"github.com/aws/aws-sdk-go/service/s3/s3manager"
 	"github.com/spf13/afero"
@@ -15,8 +16,8 @@ type CacheEntity interface {
 	GetSubPath() string
 	GetSize() int64
 	HasMD5() bool
-	DownloadMD5(ctx context.Context, target *afero.File, s3downloader *s3manager.Downloader) (string, error)
-	Download(ctx context.Context, target afero.File, s3downloader *s3manager.Downloader) (int64, error)
+	DownloadMD5(ctx context.Context, target *afero.File, c *http.Client, s3downloader *s3manager.Downloader) (string, error)
+	Download(ctx context.Context, target afero.File, c *http.Client, s3downloader *s3manager.Downloader) (int64, error)
 }
 
 type LocalFile struct {
@@ -41,10 +42,10 @@ func (l LocalFile) HasMD5() bool {
 	return false
 }
 
-func (l LocalFile) DownloadMD5(ctx context.Context, target *afero.File, s3downloader *s3manager.Downloader) (string, error) {
+func (l LocalFile) DownloadMD5(ctx context.Context, target *afero.File, c *http.Client, s3downloader *s3manager.Downloader) (string, error) {
 	return "", nil
 }
 
-func (l LocalFile) Download(ctx context.Context, target afero.File, s3downloader *s3manager.Downloader) (int64, error) {
+func (l LocalFile) Download(ctx context.Context, target afero.File, c *http.Client, s3downloader *s3manager.Downloader) (int64, error) {
 	return 0, fmt.Errorf("not implemented on local file")
 }

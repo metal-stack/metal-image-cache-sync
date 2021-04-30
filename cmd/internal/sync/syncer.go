@@ -2,9 +2,11 @@ package sync
 
 import (
 	"context"
+	// nolint
 	"crypto/md5"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"path"
 	"strings"
@@ -20,13 +22,14 @@ import (
 )
 
 type Syncer struct {
-	logger    *zap.SugaredLogger
-	fs        afero.Fs
-	tmpPath   string
-	s3        *s3manager.Downloader
-	stop      context.Context
-	dry       bool
-	collector *metrics.Collector
+	logger     *zap.SugaredLogger
+	fs         afero.Fs
+	tmpPath    string
+	s3         *s3manager.Downloader
+	stop       context.Context
+	dry        bool
+	collector  *metrics.Collector
+	httpClient *http.Client
 }
 
 func NewSyncer(logger *zap.SugaredLogger, fs afero.Fs, s3 *s3manager.Downloader, config *api.Config, collector *metrics.Collector, stop context.Context) (*Syncer, error) {
@@ -48,13 +51,14 @@ func NewSyncer(logger *zap.SugaredLogger, fs afero.Fs, s3 *s3manager.Downloader,
 	}
 
 	return &Syncer{
-		logger:    logger,
-		fs:        fs,
-		tmpPath:   config.GetTmpDownloadPath(),
-		s3:        s3,
-		stop:      stop,
-		dry:       config.DryRun,
-		collector: collector,
+		logger:     logger,
+		fs:         fs,
+		tmpPath:    config.GetTmpDownloadPath(),
+		s3:         s3,
+		stop:       stop,
+		httpClient: http.DefaultClient,
+		dry:        config.DryRun,
+		collector:  collector,
 	}, nil
 }
 
@@ -88,14 +92,14 @@ func (s *Syncer) sync(rootPath string, current api.CacheEntities, toSync api.Cac
 	for _, e := range remove {
 		err := s.remove(rootPath, e)
 		if err != nil {
-			return fmt.Errorf("error deleting cached file, retrying in next sync schedule: %v", err)
+			return fmt.Errorf("error deleting cached file, retrying in next sync schedule: %w", err)
 		}
 	}
 
 	for _, e := range add {
-		err := s.download(s.stop, rootPath, e)
+		err := s.download(rootPath, e)
 		if err != nil {
-			return fmt.Errorf("error downloading file, retrying in next sync schedule: %v", err)
+			return fmt.Errorf("error downloading file, retrying in next sync schedule: %w", err)
 		}
 	}
 
@@ -153,7 +157,7 @@ func (s *Syncer) defineDiff(rootPath string, currentEntities api.CacheEntities, 
 			continue
 		}
 
-		expected, err := wantEntity.DownloadMD5(s.stop, nil, s.s3)
+		expected, err := wantEntity.DownloadMD5(s.stop, nil, s.httpClient, s.s3)
 		if err != nil {
 			s.logger.Errorw("error downloading checksum", "error", err)
 			continue
@@ -195,7 +199,7 @@ func (s *Syncer) fileMD5(filePath string) (string, error) {
 		return "", err
 	}
 	defer file.Close()
-	hash := md5.New()
+	hash := md5.New() // nolint
 	if _, err := io.Copy(hash, file); err != nil {
 		return "", err
 	}
@@ -203,7 +207,7 @@ func (s *Syncer) fileMD5(filePath string) (string, error) {
 	return fmt.Sprintf("%x", hash.Sum(nil)), nil
 }
 
-func (s *Syncer) download(ctx context.Context, rootPath string, e api.CacheEntity) error {
+func (s *Syncer) download(rootPath string, e api.CacheEntity) error {
 	tmpTargetPath := strings.Join([]string{s.tmpPath, "tmp"}, string(os.PathSeparator))
 	targetPath := strings.Join([]string{rootPath, e.GetSubPath()}, string(os.PathSeparator))
 	md5TargetPath := strings.Join([]string{rootPath, e.GetSubPath() + ".md5"}, string(os.PathSeparator))
@@ -224,12 +228,12 @@ func (s *Syncer) download(ctx context.Context, rootPath string, e api.CacheEntit
 
 	f, err := s.fs.Create(tmpTargetPath)
 	if err != nil {
-		return fmt.Errorf("error opening file path %s: %v", targetPath, err)
+		return fmt.Errorf("error opening file path %s: %w", targetPath, err)
 	}
 	defer f.Close()
 
 	s.logger.Infow("downloading file", "id", e.GetName(), "key", e.GetSubPath(), "size", e.GetSize(), "to", tmpTargetPath)
-	n, err := e.Download(s.stop, f, s.s3)
+	n, err := e.Download(s.stop, f, s.httpClient, s.s3)
 	if err != nil {
 		return err
 	}
@@ -251,12 +255,12 @@ func (s *Syncer) download(ctx context.Context, rootPath string, e api.CacheEntit
 
 	f, err = s.fs.Create(md5TargetPath)
 	if err != nil {
-		return fmt.Errorf("error opening file path %s: %v", md5TargetPath, err)
+		return fmt.Errorf("error opening file path %s: %w", md5TargetPath, err)
 	}
 	defer f.Close()
 
 	s.logger.Infow("downloading md5 checksum", "id", e.GetName(), "key", e.GetSubPath(), "to", md5TargetPath)
-	_, err = e.DownloadMD5(s.stop, &f, s.s3)
+	_, err = e.DownloadMD5(s.stop, &f, s.httpClient, s.s3)
 	if err != nil {
 		return err
 	}
@@ -270,6 +274,7 @@ func (s *Syncer) remove(rootPath string, e api.CacheEntity) error {
 	err := s.fs.Remove(path)
 	if err != nil {
 		s.logger.Errorw("error deleting file", "error", err)
+		return err
 	}
 	exists, err := afero.Exists(s.fs, path+".md5")
 	if err != nil {
@@ -278,6 +283,7 @@ func (s *Syncer) remove(rootPath string, e api.CacheEntity) error {
 		err = s.fs.Remove(path + ".md5")
 		if err != nil {
 			s.logger.Errorw("error deleting os image md5 file", "error", err)
+			return err
 		}
 	}
 	return nil

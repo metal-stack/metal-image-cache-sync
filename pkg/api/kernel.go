@@ -42,12 +42,19 @@ func (k Kernel) HasMD5() bool {
 	return false
 }
 
-func (k Kernel) DownloadMD5(ctx context.Context, target *afero.File, s3downloader *s3manager.Downloader) (string, error) {
+func (k Kernel) DownloadMD5(ctx context.Context, target *afero.File, c *http.Client, s3downloader *s3manager.Downloader) (string, error) {
 	return "", nil
 }
 
-func (k Kernel) Download(ctx context.Context, target afero.File, s3downloader *s3manager.Downloader) (int64, error) {
-	resp, err := http.Get(k.URL)
+func (k Kernel) Download(ctx context.Context, target afero.File, c *http.Client, s3downloader *s3manager.Downloader) (int64, error) {
+	req, err := http.NewRequest(http.MethodGet, k.URL, nil)
+	if err != nil {
+		return 0, errors.Wrap(err, "unable to create get request")
+	}
+
+	req = req.WithContext(ctx)
+
+	resp, err := c.Do(req)
 	if err != nil {
 		return 0, errors.Wrap(err, "kernel download error")
 	}

@@ -1,6 +1,7 @@
 package synclister
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -19,20 +20,24 @@ import (
 )
 
 type SyncLister struct {
-	logger    *zap.SugaredLogger
-	driver    *metalgo.Driver
-	config    *api.Config
-	s3        *s3.S3
-	collector *metrics.Collector
+	logger     *zap.SugaredLogger
+	driver     *metalgo.Driver
+	config     *api.Config
+	s3         *s3.S3
+	stop       context.Context
+	collector  *metrics.Collector
+	httpClient *http.Client
 }
 
-func NewSyncLister(logger *zap.SugaredLogger, driver *metalgo.Driver, s3 *s3.S3, collector *metrics.Collector, config *api.Config) *SyncLister {
+func NewSyncLister(logger *zap.SugaredLogger, driver *metalgo.Driver, s3 *s3.S3, collector *metrics.Collector, config *api.Config, stop context.Context) *SyncLister {
 	return &SyncLister{
-		logger:    logger,
-		driver:    driver,
-		config:    config,
-		s3:        s3,
-		collector: collector,
+		logger:     logger,
+		driver:     driver,
+		config:     config,
+		s3:         s3,
+		stop:       stop,
+		collector:  collector,
+		httpClient: http.DefaultClient,
 	}
 }
 
@@ -116,12 +121,13 @@ func (s *SyncLister) DetermineImageSyncList() ([]api.OS, error) {
 	var sizeCount int64
 	var syncImages []api.OS
 	for _, versions := range images {
-		for _, images := range versions {
-			sort.Slice(images, func(i, j int) bool {
-				return images[i].Version.GreaterThan(images[j].Version)
+		for _, versionedImages := range versions {
+			versionedImages := versionedImages
+			sort.Slice(versionedImages, func(i, j int) bool {
+				return versionedImages[i].Version.GreaterThan(versionedImages[j].Version)
 			})
 			amount := 0
-			for _, img := range images {
+			for _, img := range versionedImages {
 				if s.config.MaxImagesPerName > 0 && amount >= s.config.MaxImagesPerName {
 					break
 				}
@@ -192,7 +198,7 @@ func (s *SyncLister) DetermineKernelSyncList() ([]api.Kernel, error) {
 			continue
 		}
 
-		size, err := retrieveContentLength(u.String())
+		size, err := retrieveContentLength(s.stop, s.httpClient, u.String())
 		if err != nil {
 			s.logger.Warnw("unable to determine kernel download size", "error", err)
 		}
@@ -238,13 +244,13 @@ func (s *SyncLister) DetermineBootImageSyncList() ([]api.BootImage, error) {
 			continue
 		}
 
-		size, err := retrieveContentLength(u.String())
+		size, err := retrieveContentLength(s.stop, s.httpClient, u.String())
 		if err != nil {
 			s.logger.Warnw("unable to determine boot image download size", "error", err)
 		}
 
 		md5URL := u.String() + ".md5"
-		_, err = retrieveContentLength(md5URL)
+		_, err = retrieveContentLength(s.stop, s.httpClient, md5URL)
 		if err != nil {
 			s.logger.Errorw("boot image md5 does not exist, skipping", "url", md5URL, "error", err)
 			continue
@@ -260,14 +266,22 @@ func (s *SyncLister) DetermineBootImageSyncList() ([]api.BootImage, error) {
 	return result, nil
 }
 
-func retrieveContentLength(url string) (int64, error) {
-	resp, err := http.Head(url)
+func retrieveContentLength(ctx context.Context, c *http.Client, url string) (int64, error) {
+	req, err := http.NewRequest(http.MethodHead, url, nil)
 	if err != nil {
-		return 0, errors.Wrap(err, "unable issue HEAD request")
+		return 0, errors.Wrap(err, "unable to create head request")
 	}
 
+	req = req.WithContext(ctx)
+
+	resp, err := c.Do(req)
+	if err != nil {
+		return 0, err
+	}
+	defer resp.Body.Close()
+
 	if resp.StatusCode != http.StatusOK {
-		return 0, fmt.Errorf("HEAD request to url did not return OK: %s", url)
+		return 0, fmt.Errorf("head request to url did not return OK: %s", url)
 	}
 
 	size, err := strconv.Atoi(resp.Header.Get("Content-Length"))

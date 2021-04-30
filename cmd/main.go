@@ -198,7 +198,7 @@ func run() error {
 	s3Client := s3.New(ss)
 	s3Downloader := s3manager.NewDownloader(ss)
 
-	lister = synclister.NewSyncLister(logger.Named("sync-lister"), driver, s3Client, collector, c)
+	lister = synclister.NewSyncLister(logger.Named("sync-lister"), driver, s3Client, collector, c, stop)
 
 	syncer, err = sync.NewSyncer(logger.Named("syncer"), fs, s3Downloader, c, collector, stop)
 	if err != nil {
@@ -261,7 +261,7 @@ func run() error {
 			logger.Infow("starting to serve files", "bind-address", h.bindAddress, "directory", h.serveDir)
 			err := srv.ListenAndServe()
 			if err != nil {
-				if err != http.ErrServerClosed {
+				if errors.Is(err, http.ErrServerClosed) {
 					logger.Fatalw("error starting http server, shutting down...", "error", err)
 				}
 			}

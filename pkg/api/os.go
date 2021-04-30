@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"sort"
 	"strings"
 
@@ -65,7 +66,7 @@ func (o OS) HasMD5() bool {
 	return true
 }
 
-func (o OS) DownloadMD5(ctx context.Context, target *afero.File, s3downloader *s3manager.Downloader) (string, error) {
+func (o OS) DownloadMD5(ctx context.Context, target *afero.File, c *http.Client, s3downloader *s3manager.Downloader) (string, error) {
 	if target != nil {
 		_, err := s3downloader.DownloadWithContext(ctx, *target, &s3.GetObjectInput{
 			Bucket: &o.BucketName,
@@ -94,7 +95,7 @@ func (o OS) DownloadMD5(ctx context.Context, target *afero.File, s3downloader *s
 	return parts[0], nil
 }
 
-func (o OS) Download(ctx context.Context, target afero.File, s3downloader *s3manager.Downloader) (int64, error) {
+func (o OS) Download(ctx context.Context, target afero.File, c *http.Client, s3downloader *s3manager.Downloader) (int64, error) {
 	n, err := s3downloader.DownloadWithContext(ctx, target, &s3.GetObjectInput{
 		Bucket: &o.BucketName,
 		Key:    &o.BucketKey,

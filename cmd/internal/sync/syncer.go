@@ -45,10 +45,6 @@ func NewSyncer(logger *zap.SugaredLogger, fs afero.Fs, s3 *s3manager.Downloader,
 	if err != nil {
 		return nil, errors.Wrap(err, "error creating boot image subdirectory in cache root")
 	}
-	err = fs.MkdirAll(config.GetTmpDownloadPath(), 0755)
-	if err != nil {
-		return nil, errors.Wrap(err, "error creating tmp download subdirectory in cache root")
-	}
 
 	return &Syncer{
 		logger:     logger,
@@ -207,7 +203,7 @@ func (s *Syncer) download(rootPath string, e api.CacheEntity) error {
 	_ = s.fs.Remove(targetPath)
 	_ = s.fs.Remove(md5TargetPath)
 
-	err := s.fs.MkdirAll(path.Dir(s.tmpPath), 0755)
+	err := s.fs.MkdirAll(path.Dir(tmpTargetPath), 0755)
 	if err != nil {
 		return errors.Wrap(err, "error creating tmp download path in cache root")
 	}

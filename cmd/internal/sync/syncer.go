@@ -68,16 +68,7 @@ func (s *Syncer) Sync(rootPath string, entitiesToSync api.CacheEntities) error {
 		return errors.Wrap(err, "error creating file index")
 	}
 
-	err = s.sync(rootPath, current, entitiesToSync)
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func (s *Syncer) sync(rootPath string, current api.CacheEntities, toSync api.CacheEntities) error {
-	remove, keep, add, err := s.defineDiff(rootPath, current, toSync)
+	remove, keep, add, err := s.defineDiff(rootPath, current, entitiesToSync)
 	if err != nil {
 		return errors.Wrap(err, "error creating cache diff")
 	}

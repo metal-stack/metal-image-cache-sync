@@ -30,7 +30,7 @@ const (
 	cacheRoot = "/tmp/test-path"
 )
 
-func TestSyncer_currentImageIndex(t *testing.T) {
+func Test_currentFileIndex(t *testing.T) {
 	tests := []struct {
 		name      string
 		fsModFunc func(t *testing.T, fs afero.Fs)
@@ -54,26 +54,20 @@ func TestSyncer_currentImageIndex(t *testing.T) {
 				createTestFile(t, fs, cacheRoot+"/ubuntu/20.10/20201026/img.tar.lz4.md5")
 			},
 			want: api.CacheEntities{
-				api.OS{
-					BucketKey: "ubuntu/19.04/20201025/img.tar.lz4",
-					Version:   &semver.Version{},
-					ImageRef: s3.Object{
-						Size: int64Ptr(4),
-					},
+				api.LocalFile{
+					Name:    "img.tar.lz4",
+					SubPath: "ubuntu/19.04/20201025/img.tar.lz4",
+					Size:    4,
 				},
-				api.OS{
-					BucketKey: "ubuntu/19.04/20201026/img.tar.lz4",
-					Version:   &semver.Version{},
-					ImageRef: s3.Object{
-						Size: int64Ptr(4),
-					},
+				api.LocalFile{
+					Name:    "img.tar.lz4",
+					SubPath: "ubuntu/19.04/20201026/img.tar.lz4",
+					Size:    4,
 				},
-				api.OS{
-					BucketKey: "ubuntu/20.10/20201026/img.tar.lz4",
-					Version:   &semver.Version{},
-					ImageRef: s3.Object{
-						Size: int64Ptr(4),
-					},
+				api.LocalFile{
+					Name:    "img.tar.lz4",
+					SubPath: "ubuntu/20.10/20201026/img.tar.lz4",
+					Size:    4,
 				},
 			},
 			wantErr: false,
@@ -86,12 +80,7 @@ func TestSyncer_currentImageIndex(t *testing.T) {
 			if tt.fsModFunc != nil {
 				tt.fsModFunc(t, fs)
 			}
-			s := &Syncer{
-				logger:    zaptest.NewLogger(t).Sugar(),
-				fs:        fs,
-				imageRoot: cacheRoot,
-			}
-			got, err := s.currentImageIndex()
+			got, err := currentFileIndex(fs, cacheRoot)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("Syncer.currentImageIndex() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -328,12 +317,10 @@ func TestSyncer_defineImageDiff(t *testing.T) {
 			s3Client, _, _ := dlLoggingSvc([]byte(remoteChecksumFile))
 			d := s3manager.NewDownloaderWithClient(s3Client)
 			s := &Syncer{
-				logger:     zaptest.NewLogger(t).Sugar(),
-				fs:         fs,
-				imageRoot:  cacheRoot,
-				s3:         d,
-				bucketName: "metal-os",
-				stop:       context.TODO(),
+				logger: zaptest.NewLogger(t).Sugar(),
+				fs:     fs,
+				s3:     d,
+				stop:   context.TODO(),
 			}
 
 			gotRemove, gotKeep, gotAdd, err := s.defineDiff(cacheRoot, tt.currentImages, tt.wantImages)
@@ -356,8 +343,4 @@ func TestSyncer_defineImageDiff(t *testing.T) {
 
 func strPtr(s string) *string {
 	return &s
-}
-
-func int64Ptr(i int64) *int64 {
-	return &i
 }

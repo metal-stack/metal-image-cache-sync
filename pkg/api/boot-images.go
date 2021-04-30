@@ -15,9 +15,9 @@ import (
 )
 
 type BootImage struct {
-	Key  string
-	URL  string
-	Size int64
+	SubPath string
+	URL     string
+	Size    int64
 }
 
 func (b BootImage) GetName() string {
@@ -31,8 +31,8 @@ func (b BootImage) GetName() string {
 	return b.URL
 }
 
-func (b BootImage) GetPath() string {
-	return b.Key
+func (b BootImage) GetSubPath() string {
+	return b.SubPath
 }
 
 func (b BootImage) GetSize() int64 {

@@ -88,16 +88,15 @@ func init() {
 
 	rootCmd.Flags().Uint("expiration-grace-period", 0, "the amount of days to still sync images even if they have already expired in the metal-api (defaults to zero)")
 
+	rootCmd.Flags().String("cache-root-path", "/var/lib/metal-image-cache-sync", "root path of where to store the cached entities")
+
 	rootCmd.Flags().String("image-cache-bind-address", "0.0.0.0:3000", "image cache http server bind address")
-	rootCmd.Flags().String("image-cache-path", "/var/lib/metal-image-cache-sync/images", "root path of where to store the images")
 
 	rootCmd.Flags().Bool("enable-kernel-cache", true, "enables caching kernels used for PXE booting inside partitions")
 	rootCmd.Flags().String("kernel-cache-bind-address", "0.0.0.0:3001", "kernel cache http server bind address")
-	rootCmd.Flags().String("kernel-cache-path", "/var/lib/metal-image-cache-sync/kernels", "root path of where to store the boot kernels")
 
 	rootCmd.Flags().Bool("enable-boot-image-cache", true, "enables caching initrd images used for PXE booting inside partitions")
 	rootCmd.Flags().String("boot-image-cache-bind-address", "0.0.0.0:3002", "kernel cache http server bind address")
-	rootCmd.Flags().String("boot-image-cache-path", "/var/lib/metal-image-cache-sync/boot-images", "root path of where to store the boot images")
 
 	rootCmd.Flags().StringSlice("excludes", []string{"/pull_requests/"}, "url paths to exclude from the sync")
 
@@ -179,7 +178,7 @@ func run() error {
 		return err
 	}
 
-	collector := metrics.MustMetrics(logger.Named("metrics"), c.ImageCacheRootPath)
+	collector := metrics.MustMetrics(logger.Named("metrics"), c.CacheRootPath)
 
 	dummyRegion := "dummy" // we don't use AWS S3, we don't need a proper region
 	ss, err := session.NewSession(&aws.Config{
@@ -212,7 +211,7 @@ func run() error {
 	))
 
 	id, err := cronjob.AddFunc(c.SyncSchedule, func() {
-		err := runSync()
+		err := runSync(c)
 		if err != nil {
 			logger.Errorw("error during sync", "error", err)
 		}
@@ -225,14 +224,14 @@ func run() error {
 		return errors.Wrap(err, "could not initialize cron schedule")
 	}
 
-	handlers := []cacheFileHandler{newCacheFileHandler(c.ImageCacheBindAddress, c.ImageCacheRootPath, collector)}
+	handlers := []cacheFileHandler{newCacheFileHandler(c.ImageCacheBindAddress, c.GetImageRootPath(), collector)}
 	if c.KernelCacheEnabled {
 		// TODO: own collector for kernels
-		handlers = append(handlers, newCacheFileHandler(c.KernelCacheBindAddress, c.KernelCacheRootPath, collector))
+		handlers = append(handlers, newCacheFileHandler(c.KernelCacheBindAddress, c.GetKernelRootPath(), collector))
 	}
 	if c.BootImageCacheEnabled {
 		// TODO: own collector for boot images
-		handlers = append(handlers, newCacheFileHandler(c.BootImageCacheBindAddress, c.BootImageCacheRootPath, collector))
+		handlers = append(handlers, newCacheFileHandler(c.BootImageCacheBindAddress, c.GetBootImageRootPath(), collector))
 	}
 
 	logger.Infow("start metal stack image sync", "version", v.V.String())
@@ -270,7 +269,7 @@ func run() error {
 
 	}
 
-	err = runSync()
+	err = runSync(c)
 	if err != nil {
 		logger.Errorw("error during initial sync", "error", err)
 	}
@@ -319,13 +318,13 @@ func (c *cacheFileHandler) handle(w http.ResponseWriter, r *http.Request) {
 	case http.StatusOK:
 		c.collector.IncrementDownloadedImages()
 	case 0:
-		// occurs when just visting directories through browser
+		// occurs when just visting directories through browser, swallow
 	default:
 		logger.Infow("responded with error code for download", "url", r.URL.String(), "code", code)
 	}
 }
 
-func runSync() error {
+func runSync(c *api.Config) error {
 	var errs []error
 
 	err := func() error {
@@ -334,7 +333,12 @@ func runSync() error {
 			return errors.Wrap(err, "cannot gather images")
 		}
 
-		err = syncer.SyncImages(syncImages)
+		var converted api.CacheEntities
+		for _, s := range syncImages {
+			converted = append(converted, s)
+		}
+
+		err = syncer.Sync(c.GetImageRootPath(), converted)
 		if err != nil {
 			return errors.Wrap(err, "error during image sync")
 		}
@@ -351,7 +355,12 @@ func runSync() error {
 			return errors.Wrap(err, "cannot kernel images")
 		}
 
-		err = syncer.SyncKernels(syncKernels)
+		var converted api.CacheEntities
+		for _, s := range syncKernels {
+			converted = append(converted, s)
+		}
+
+		err = syncer.Sync(c.GetKernelRootPath(), converted)
 		if err != nil {
 			return errors.Wrap(err, "error during kernel sync")
 		}
@@ -368,7 +377,12 @@ func runSync() error {
 			return errors.Wrap(err, "cannot gather boot images")
 		}
 
-		err = syncer.SyncBootImages(syncImages)
+		var converted api.CacheEntities
+		for _, s := range syncImages {
+			converted = append(converted, s)
+		}
+
+		err = syncer.Sync(c.GetBootImageRootPath(), converted)
 		if err != nil {
 			return errors.Wrap(err, "error during boot image sync")
 		}

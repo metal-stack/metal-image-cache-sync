@@ -194,36 +194,17 @@ func (s *SyncLister) DetermineKernelSyncList() ([]api.Kernel, error) {
 
 		size, err := retrieveContentLength(u.String())
 		if err != nil {
-			s.logger.Errorw("unable to determine kernel download size, skipping", "error", err)
-			continue
+			s.logger.Warnw("unable to determine kernel download size", "error", err)
 		}
 
 		result = append(result, api.Kernel{
-			Key:  strings.TrimPrefix(u.Path, "/"),
-			URL:  kernelURL,
-			Size: size,
+			SubPath: strings.TrimPrefix(u.Path, "/"),
+			URL:     kernelURL,
+			Size:    size,
 		})
 	}
 
 	return result, nil
-}
-
-func retrieveContentLength(url string) (int64, error) {
-	resp, err := http.Head(url)
-	if err != nil {
-		return 0, errors.Wrap(err, "unable issue HEAD request")
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		return 0, fmt.Errorf("HEAD request to url did not return OK: %s", url)
-	}
-
-	size, err := strconv.Atoi(resp.Header.Get("Content-Length"))
-	if err != nil {
-		return 0, errors.Wrap(err, "content-length header value could not be converted to integer")
-	}
-
-	return int64(size), nil
 }
 
 func (s *SyncLister) DetermineBootImageSyncList() ([]api.BootImage, error) {
@@ -259,8 +240,7 @@ func (s *SyncLister) DetermineBootImageSyncList() ([]api.BootImage, error) {
 
 		size, err := retrieveContentLength(u.String())
 		if err != nil {
-			s.logger.Errorw("unable to determine boot image download size, skipping", "error", err)
-			continue
+			s.logger.Warnw("unable to determine boot image download size", "error", err)
 		}
 
 		md5URL := u.String() + ".md5"
@@ -271,13 +251,31 @@ func (s *SyncLister) DetermineBootImageSyncList() ([]api.BootImage, error) {
 		}
 
 		result = append(result, api.BootImage{
-			Key:  strings.TrimPrefix(u.Path, "/"),
-			URL:  bootImageURL,
-			Size: size,
+			SubPath: strings.TrimPrefix(u.Path, "/"),
+			URL:     bootImageURL,
+			Size:    size,
 		})
 	}
 
 	return result, nil
+}
+
+func retrieveContentLength(url string) (int64, error) {
+	resp, err := http.Head(url)
+	if err != nil {
+		return 0, errors.Wrap(err, "unable issue HEAD request")
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return 0, fmt.Errorf("HEAD request to url did not return OK: %s", url)
+	}
+
+	size, err := strconv.Atoi(resp.Header.Get("Content-Length"))
+	if err != nil {
+		return 0, errors.Wrap(err, "content-length header value could not be converted to integer")
+	}
+
+	return int64(size), nil
 }
 
 func (s *SyncLister) reduce(images []api.OS, sizeCount int64) ([]api.OS, int64, error) {

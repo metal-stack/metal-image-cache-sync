@@ -7,11 +7,8 @@ import (
 	"io"
 	"os"
 	"path"
-	"path/filepath"
 	"strings"
 
-	"github.com/Masterminds/semver"
-	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/aws/aws-sdk-go/service/s3/s3manager"
 	"github.com/docker/go-units"
 	"github.com/metal-stack/metal-image-cache-sync/cmd/internal/metrics"
@@ -23,95 +20,51 @@ import (
 )
 
 type Syncer struct {
-	logger        *zap.SugaredLogger
-	fs            afero.Fs
-	imageRoot     string
-	kernelRoot    string
-	bootImageRoot string
-	s3            *s3manager.Downloader
-	bucketName    string
-	stop          context.Context
-	dry           bool
-	collector     *metrics.Collector
+	logger    *zap.SugaredLogger
+	fs        afero.Fs
+	tmpPath   string
+	s3        *s3manager.Downloader
+	stop      context.Context
+	dry       bool
+	collector *metrics.Collector
 }
 
 func NewSyncer(logger *zap.SugaredLogger, fs afero.Fs, s3 *s3manager.Downloader, config *api.Config, collector *metrics.Collector, stop context.Context) (*Syncer, error) {
-	absImageRoot, err := filepath.Abs(config.ImageCacheRootPath)
+	err := fs.MkdirAll(config.GetImageRootPath(), 0755)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "error creating image subdirectory in cache root")
 	}
-	absKernelRoot, err := filepath.Abs(config.KernelCacheRootPath)
+	err = fs.MkdirAll(config.GetKernelRootPath(), 0755)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "error creating kernel subdirectory in cache root")
 	}
-	absBootImageRoot, err := filepath.Abs(config.BootImageCacheRootPath)
+	err = fs.MkdirAll(config.GetBootImageRootPath(), 0755)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "error creating boot image subdirectory in cache root")
 	}
+	err = fs.MkdirAll(config.GetTmpDownloadPath(), 0755)
+	if err != nil {
+		return nil, errors.Wrap(err, "error creating tmp download subdirectory in cache root")
+	}
+
 	return &Syncer{
-		logger:        logger,
-		fs:            fs,
-		imageRoot:     absImageRoot,
-		kernelRoot:    absKernelRoot,
-		bootImageRoot: absBootImageRoot,
-		s3:            s3,
-		bucketName:    config.ImageBucket,
-		stop:          stop,
-		dry:           config.DryRun,
-		collector:     collector,
+		logger:    logger,
+		fs:        fs,
+		tmpPath:   config.GetTmpDownloadPath(),
+		s3:        s3,
+		stop:      stop,
+		dry:       config.DryRun,
+		collector: collector,
 	}, nil
 }
 
-func (s *Syncer) SyncImages(imagesToSync []api.OS) error {
-	current, err := s.currentImageIndex()
+func (s *Syncer) Sync(rootPath string, entitiesToSync api.CacheEntities) error {
+	current, err := currentFileIndex(s.fs, rootPath)
 	if err != nil {
-		return errors.Wrap(err, "error creating image index")
+		return errors.Wrap(err, "error creating file index")
 	}
 
-	var toSync api.CacheEntities
-	for _, i := range imagesToSync {
-		toSync = append(toSync, i)
-	}
-
-	err = s.sync(s.imageRoot, current, toSync)
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func (s *Syncer) SyncKernels(kernelsToSync []api.Kernel) error {
-	current, err := s.currentKernelIndex()
-	if err != nil {
-		return errors.Wrap(err, "error creating image index")
-	}
-
-	var toSync api.CacheEntities
-	for _, k := range kernelsToSync {
-		toSync = append(toSync, k)
-	}
-
-	err = s.sync(s.kernelRoot, current, toSync)
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func (s *Syncer) SyncBootImages(imagesToSync []api.BootImage) error {
-	current, err := s.currentBootImageIndex()
-	if err != nil {
-		return errors.Wrap(err, "error creating image index")
-	}
-
-	var toSync api.CacheEntities
-	for _, i := range imagesToSync {
-		toSync = append(toSync, i)
-	}
-
-	err = s.sync(s.bootImageRoot, current, toSync)
+	err = s.sync(rootPath, current, entitiesToSync)
 	if err != nil {
 		return err
 	}
@@ -149,9 +102,9 @@ func (s *Syncer) sync(rootPath string, current api.CacheEntities, toSync api.Cac
 	return nil
 }
 
-func (s *Syncer) currentImageIndex() (api.CacheEntities, error) {
+func currentFileIndex(fs afero.Fs, rootPath string) (api.CacheEntities, error) {
 	var result api.CacheEntities
-	err := afero.Walk(s.fs, s.imageRoot, func(p string, info os.FileInfo, innerErr error) error {
+	err := afero.Walk(fs, rootPath, func(p string, info os.FileInfo, innerErr error) error {
 		if innerErr != nil {
 			return errors.Wrap(innerErr, "error while walking through cache root")
 		}
@@ -164,72 +117,10 @@ func (s *Syncer) currentImageIndex() (api.CacheEntities, error) {
 			return nil
 		}
 
-		size := info.Size()
-
-		result = append(result, api.OS{
-			BucketKey: p[len(s.imageRoot)+1:],
-			Version:   &semver.Version{},
-			ImageRef: s3.Object{
-				Size: &size,
-			},
-		})
-
-		return nil
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	return result, nil
-}
-
-func (s *Syncer) currentKernelIndex() (api.CacheEntities, error) {
-	var result api.CacheEntities
-	err := afero.Walk(s.fs, s.kernelRoot, func(p string, info os.FileInfo, innerErr error) error {
-		if innerErr != nil {
-			return errors.Wrap(innerErr, "error while walking through cache root")
-		}
-
-		if info.IsDir() {
-			return nil
-		}
-
-		size := info.Size()
-
-		result = append(result, api.Kernel{
-			Key:  p[len(s.kernelRoot)+1:],
-			Size: size,
-		})
-
-		return nil
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	return result, nil
-}
-
-func (s *Syncer) currentBootImageIndex() (api.CacheEntities, error) {
-	var result api.CacheEntities
-	err := afero.Walk(s.fs, s.bootImageRoot, func(p string, info os.FileInfo, innerErr error) error {
-		if innerErr != nil {
-			return errors.Wrap(innerErr, "error while walking through cache root")
-		}
-
-		if info.IsDir() {
-			return nil
-		}
-
-		if strings.HasSuffix(p, ".md5") {
-			return nil
-		}
-
-		size := info.Size()
-
-		result = append(result, api.BootImage{
-			Key:  p[len(s.bootImageRoot)+1:],
-			Size: size,
+		result = append(result, api.LocalFile{
+			Name:    info.Name(),
+			SubPath: p[len(rootPath)+1:],
+			Size:    info.Size(),
 		})
 
 		return nil
@@ -246,7 +137,7 @@ func (s *Syncer) defineDiff(rootPath string, currentEntities api.CacheEntities, 
 	for _, wantEntity := range wantEntities {
 		var existing api.CacheEntity
 		for _, entityOnDisk := range currentEntities {
-			if entityOnDisk.GetPath() == wantEntity.GetPath() {
+			if entityOnDisk.GetSubPath() == wantEntity.GetSubPath() {
 				existing = entityOnDisk
 				break
 			}
@@ -268,7 +159,7 @@ func (s *Syncer) defineDiff(rootPath string, currentEntities api.CacheEntities, 
 			continue
 		}
 
-		hash, err := s.fileMD5(strings.Join([]string{rootPath, existing.GetPath()}, string(os.PathSeparator)))
+		hash, err := s.fileMD5(strings.Join([]string{rootPath, existing.GetSubPath()}, string(os.PathSeparator)))
 		if err != nil {
 			return nil, nil, nil, errors.Wrap(err, "error calculating hash sum of local file")
 		}
@@ -285,7 +176,7 @@ func (s *Syncer) defineDiff(rootPath string, currentEntities api.CacheEntities, 
 	for _, e := range currentEntities {
 		found := false
 		for _, wantEntity := range wantEntities {
-			if e.GetPath() == wantEntity.GetPath() {
+			if e.GetSubPath() == wantEntity.GetSubPath() {
 				found = true
 			}
 		}
@@ -313,31 +204,46 @@ func (s *Syncer) fileMD5(filePath string) (string, error) {
 }
 
 func (s *Syncer) download(ctx context.Context, rootPath string, e api.CacheEntity) error {
-	targetPath := strings.Join([]string{rootPath, e.GetPath()}, string(os.PathSeparator))
-	md5TargetPath := strings.Join([]string{rootPath, e.GetPath() + ".md5"}, string(os.PathSeparator))
+	tmpTargetPath := strings.Join([]string{s.tmpPath, "tmp"}, string(os.PathSeparator))
+	targetPath := strings.Join([]string{rootPath, e.GetSubPath()}, string(os.PathSeparator))
+	md5TargetPath := strings.Join([]string{rootPath, e.GetSubPath() + ".md5"}, string(os.PathSeparator))
 
+	_ = s.fs.Remove(tmpTargetPath)
 	_ = s.fs.Remove(targetPath)
 	_ = s.fs.Remove(md5TargetPath)
 
-	err := s.fs.MkdirAll(path.Dir(targetPath), 0755)
+	err := s.fs.MkdirAll(path.Dir(s.tmpPath), 0755)
+	if err != nil {
+		return errors.Wrap(err, "error creating tmp download path in cache root")
+	}
+
+	err = s.fs.MkdirAll(path.Dir(targetPath), 0755)
 	if err != nil {
 		return errors.Wrap(err, "error creating path in cache root")
 	}
 
-	f, err := s.fs.Create(targetPath)
+	f, err := s.fs.Create(tmpTargetPath)
 	if err != nil {
 		return fmt.Errorf("error opening file path %s: %v", targetPath, err)
 	}
 	defer f.Close()
 
-	s.logger.Infow("downloading file", "id", e.GetName(), "key", e.GetPath(), "size", e.GetSize(), "to", targetPath)
+	s.logger.Infow("downloading file", "id", e.GetName(), "key", e.GetSubPath(), "size", e.GetSize(), "to", tmpTargetPath)
 	n, err := e.Download(s.stop, f, s.s3)
 	if err != nil {
 		return err
 	}
+	defer func() {
+		_ = s.fs.Remove(tmpTargetPath)
+	}()
 
 	s.collector.AddSyncDownloadImageBytes(n)
 	s.collector.IncrementSyncDownloadImageCount()
+
+	err = s.fs.Rename(tmpTargetPath, targetPath)
+	if err != nil {
+		return errors.Wrap(err, "error moving downloaded file to final destination")
+	}
 
 	if !e.HasMD5() {
 		return nil
@@ -349,8 +255,8 @@ func (s *Syncer) download(ctx context.Context, rootPath string, e api.CacheEntit
 	}
 	defer f.Close()
 
-	s.logger.Infow("downloading md5 checksum", "id", e.GetName(), "key", e.GetPath(), "to", md5TargetPath)
-	e.DownloadMD5(s.stop, &f, s.s3)
+	s.logger.Infow("downloading md5 checksum", "id", e.GetName(), "key", e.GetSubPath(), "to", md5TargetPath)
+	_, err = e.DownloadMD5(s.stop, &f, s.s3)
 	if err != nil {
 		return err
 	}
@@ -359,8 +265,8 @@ func (s *Syncer) download(ctx context.Context, rootPath string, e api.CacheEntit
 }
 
 func (s *Syncer) remove(rootPath string, e api.CacheEntity) error {
-	path := strings.Join([]string{rootPath, e.GetPath()}, string(os.PathSeparator))
-	s.logger.Infow("removing file from disk", "path", e.GetPath(), "id", e.GetName())
+	path := strings.Join([]string{rootPath, e.GetSubPath()}, string(os.PathSeparator))
+	s.logger.Infow("removing file from disk", "path", e.GetSubPath(), "id", e.GetName())
 	err := s.fs.Remove(path)
 	if err != nil {
 		s.logger.Errorw("error deleting file", "error", err)
@@ -381,15 +287,15 @@ func (s *Syncer) printSyncPlan(remove api.CacheEntities, keep []api.CacheEntity,
 	cacheSize := int64(0)
 	data := [][]string{}
 	for _, e := range remove {
-		data = append(data, []string{"", e.GetPath(), units.HumanSize(float64(e.GetSize())), "delete"})
+		data = append(data, []string{"", e.GetSubPath(), units.HumanSize(float64(e.GetSize())), "delete"})
 	}
 	for _, e := range keep {
 		cacheSize += e.GetSize()
-		data = append(data, []string{e.GetName(), e.GetPath(), units.HumanSize(float64(e.GetSize())), "keep"})
+		data = append(data, []string{e.GetName(), e.GetSubPath(), units.HumanSize(float64(e.GetSize())), "keep"})
 	}
 	for _, e := range add {
 		cacheSize += e.GetSize()
-		data = append(data, []string{e.GetName(), e.GetPath(), units.HumanSize(float64(e.GetSize())), "download"})
+		data = append(data, []string{e.GetName(), e.GetSubPath(), units.HumanSize(float64(e.GetSize())), "download"})
 	}
 
 	s.logger.Infow("sync plan", "amount", len(keep)+len(add), "cache-size-after-sync", units.BytesSize(float64(cacheSize)))

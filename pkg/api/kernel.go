@@ -14,9 +14,9 @@ import (
 )
 
 type Kernel struct {
-	Key  string
-	URL  string
-	Size int64
+	SubPath string
+	URL     string
+	Size    int64
 }
 
 func (k Kernel) GetName() string {
@@ -30,8 +30,8 @@ func (k Kernel) GetName() string {
 	return k.URL
 }
 
-func (k Kernel) GetPath() string {
-	return k.Key
+func (k Kernel) GetSubPath() string {
+	return k.SubPath
 }
 
 func (k Kernel) GetSize() int64 {

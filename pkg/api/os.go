@@ -50,7 +50,7 @@ func (o OS) GetName() string {
 	return *o.ApiRef.ID
 }
 
-func (o OS) GetPath() string {
+func (o OS) GetSubPath() string {
 	return o.BucketKey
 }
 

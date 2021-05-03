@@ -27,6 +27,7 @@ func (h *HTTPRedirectResponseWriter) WriteHeader(code int) {
 	h.status = code
 	if code != http.StatusNotFound {
 		h.ResponseWriter.WriteHeader(code)
+		return
 	}
 
 	h.status = http.StatusTemporaryRedirect

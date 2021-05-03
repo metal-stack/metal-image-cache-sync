@@ -309,10 +309,10 @@ func newCacheFileHandler(bindAddr, serveDir string, collector *metrics.Collector
 
 func (c *cacheFileHandler) handle(w http.ResponseWriter, r *http.Request) {
 	logger.Infow("serving cache download request", "url", r.URL.String(), "from", r.RemoteAddr)
-	hw := utils.NewHTTPStatusResponseWriter(w)
+	hw := utils.NewHTTPRedirectResponseWriter(w, r)
 	c.serveHandler.ServeHTTP(hw, r)
 	switch code := hw.GetStatus(); code {
-	case http.StatusNotFound:
+	case http.StatusTemporaryRedirect:
 		logger.Infow("cache miss", "url", r.URL.String())
 		c.collector.IncrementCacheMiss()
 	case http.StatusOK:

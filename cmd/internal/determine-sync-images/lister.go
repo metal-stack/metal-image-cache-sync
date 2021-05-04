@@ -20,24 +20,24 @@ import (
 )
 
 type SyncLister struct {
-	logger     *zap.SugaredLogger
-	driver     *metalgo.Driver
-	config     *api.Config
-	s3         *s3.S3
-	stop       context.Context
-	collector  *metrics.Collector
-	httpClient *http.Client
+	logger         *zap.SugaredLogger
+	driver         *metalgo.Driver
+	config         *api.Config
+	s3             *s3.S3
+	stop           context.Context
+	imageCollector *metrics.ImageCollector
+	httpClient     *http.Client
 }
 
-func NewSyncLister(logger *zap.SugaredLogger, driver *metalgo.Driver, s3 *s3.S3, collector *metrics.Collector, config *api.Config, stop context.Context) *SyncLister {
+func NewSyncLister(logger *zap.SugaredLogger, driver *metalgo.Driver, s3 *s3.S3, imageCollector *metrics.ImageCollector, config *api.Config, stop context.Context) *SyncLister {
 	return &SyncLister{
-		logger:     logger,
-		driver:     driver,
-		config:     config,
-		s3:         s3,
-		stop:       stop,
-		collector:  collector,
-		httpClient: http.DefaultClient,
+		logger:         logger,
+		driver:         driver,
+		config:         config,
+		s3:             s3,
+		stop:           stop,
+		imageCollector: imageCollector,
+		httpClient:     http.DefaultClient,
 	}
 }
 
@@ -52,7 +52,7 @@ func (s *SyncLister) DetermineImageSyncList() ([]api.OS, error) {
 		return nil, errors.Wrap(err, "error listing images")
 	}
 
-	s.collector.SetMetalAPIImageCount(len(resp.Image))
+	s.imageCollector.SetMetalAPIImageCount(len(resp.Image))
 
 	expirationGraceDays := 24 * time.Hour * time.Duration(s.config.ExpirationGraceDays)
 
@@ -152,7 +152,7 @@ func (s *SyncLister) DetermineImageSyncList() ([]api.OS, error) {
 		}
 	}
 
-	s.collector.SetUnsyncedImageCount(len(resp.Image) - len(syncImages))
+	s.imageCollector.SetUnsyncedImageCount(len(resp.Image) - len(syncImages))
 
 	return syncImages, nil
 }

@@ -22,17 +22,17 @@ import (
 )
 
 type Syncer struct {
-	logger     *zap.SugaredLogger
-	fs         afero.Fs
-	tmpPath    string
-	s3         *s3manager.Downloader
-	stop       context.Context
-	dry        bool
-	collector  *metrics.Collector
-	httpClient *http.Client
+	logger         *zap.SugaredLogger
+	fs             afero.Fs
+	tmpPath        string
+	s3             *s3manager.Downloader
+	stop           context.Context
+	dry            bool
+	imageCollector *metrics.ImageCollector
+	httpClient     *http.Client
 }
 
-func NewSyncer(logger *zap.SugaredLogger, fs afero.Fs, s3 *s3manager.Downloader, config *api.Config, collector *metrics.Collector, stop context.Context) (*Syncer, error) {
+func NewSyncer(logger *zap.SugaredLogger, fs afero.Fs, s3 *s3manager.Downloader, config *api.Config, collector *metrics.ImageCollector, stop context.Context) (*Syncer, error) {
 	err := fs.MkdirAll(config.GetImageRootPath(), 0755)
 	if err != nil {
 		return nil, errors.Wrap(err, "error creating image subdirectory in cache root")
@@ -47,14 +47,14 @@ func NewSyncer(logger *zap.SugaredLogger, fs afero.Fs, s3 *s3manager.Downloader,
 	}
 
 	return &Syncer{
-		logger:     logger,
-		fs:         fs,
-		tmpPath:    config.GetTmpDownloadPath(),
-		s3:         s3,
-		stop:       stop,
-		httpClient: http.DefaultClient,
-		dry:        config.DryRun,
-		collector:  collector,
+		logger:         logger,
+		fs:             fs,
+		tmpPath:        config.GetTmpDownloadPath(),
+		s3:             s3,
+		stop:           stop,
+		httpClient:     http.DefaultClient,
+		dry:            config.DryRun,
+		imageCollector: collector,
 	}, nil
 }
 
@@ -228,8 +228,15 @@ func (s *Syncer) download(rootPath string, e api.CacheEntity) error {
 		_ = s.fs.Remove(tmpTargetPath)
 	}()
 
-	s.collector.AddSyncDownloadImageBytes(n)
-	s.collector.IncrementSyncDownloadImageCount()
+	switch e.(type) {
+	case *api.OS:
+		s.imageCollector.AddSyncDownloadImageBytes(n)
+		s.imageCollector.IncrementSyncDownloadImageCount()
+	case *api.BootImage:
+	case *api.Kernel:
+	case *api.LocalFile:
+	default:
+	}
 
 	err = s.fs.Rename(tmpTargetPath, targetPath)
 	if err != nil {

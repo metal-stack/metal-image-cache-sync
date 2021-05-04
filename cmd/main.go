@@ -178,7 +178,9 @@ func run() error {
 		return err
 	}
 
-	collector := metrics.MustMetrics(logger.Named("metrics"), c.CacheRootPath)
+	imageCollector := metrics.MustImageMetrics(logger.Named("metrics"), c.GetImageRootPath())
+	kernelCollector := metrics.MustKernelMetrics(logger.Named("metrics"), c.GetKernelRootPath())
+	bootImageCollector := metrics.MustBootImageMetrics(logger.Named("metrics"), c.GetBootImageRootPath())
 
 	dummyRegion := "dummy" // we don't use AWS S3, we don't need a proper region
 	ss, err := session.NewSession(&aws.Config{
@@ -198,9 +200,9 @@ func run() error {
 	s3Client := s3.New(ss)
 	s3Downloader := s3manager.NewDownloader(ss)
 
-	lister = synclister.NewSyncLister(logger.Named("sync-lister"), driver, s3Client, collector, c, stop)
+	lister = synclister.NewSyncLister(logger.Named("sync-lister"), driver, s3Client, imageCollector, c, stop)
 
-	syncer, err = sync.NewSyncer(logger.Named("syncer"), fs, s3Downloader, c, collector, stop)
+	syncer, err = sync.NewSyncer(logger.Named("syncer"), fs, s3Downloader, c, imageCollector, stop)
 	if err != nil {
 		logger.Errorw("cannot create syncer", "error", err)
 		return err
@@ -224,14 +226,12 @@ func run() error {
 		return errors.Wrap(err, "could not initialize cron schedule")
 	}
 
-	handlers := []cacheFileHandler{newCacheFileHandler(c.ImageCacheBindAddress, c.GetImageRootPath(), collector)}
+	handlers := []cacheFileHandler{newCacheFileHandler(c.ImageCacheBindAddress, c.GetImageRootPath(), imageCollector)}
 	if c.KernelCacheEnabled {
-		// TODO: own collector for kernels
-		handlers = append(handlers, newCacheFileHandler(c.KernelCacheBindAddress, c.GetKernelRootPath(), collector))
+		handlers = append(handlers, newCacheFileHandler(c.KernelCacheBindAddress, c.GetKernelRootPath(), kernelCollector))
 	}
 	if c.BootImageCacheEnabled {
-		// TODO: own collector for boot images
-		handlers = append(handlers, newCacheFileHandler(c.BootImageCacheBindAddress, c.GetBootImageRootPath(), collector))
+		handlers = append(handlers, newCacheFileHandler(c.BootImageCacheBindAddress, c.GetBootImageRootPath(), bootImageCollector))
 	}
 
 	logger.Infow("start metal stack image sync", "version", v.V.String())
@@ -241,7 +241,7 @@ func run() error {
 		h := h
 		router := http.NewServeMux()
 
-		router.Handle("/metrics", promhttp.Handler())
+		router.Handle("/metrics", promhttp.HandlerFor(h.collector.GetGatherer(), promhttp.HandlerOpts{}))
 		router.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 			_, err := w.Write([]byte("HEALTHY"))
 			if err != nil {
@@ -294,11 +294,11 @@ func run() error {
 type cacheFileHandler struct {
 	serveDir     string
 	serveHandler http.Handler
-	collector    *metrics.Collector
+	collector    metrics.DownloadCollector
 	bindAddress  string
 }
 
-func newCacheFileHandler(bindAddr, serveDir string, collector *metrics.Collector) cacheFileHandler {
+func newCacheFileHandler(bindAddr, serveDir string, collector metrics.DownloadCollector) cacheFileHandler {
 	return cacheFileHandler{
 		serveDir:     serveDir,
 		serveHandler: http.FileServer(http.Dir(serveDir)),
@@ -316,7 +316,7 @@ func (c *cacheFileHandler) handle(w http.ResponseWriter, r *http.Request) {
 		logger.Infow("cache miss", "url", r.URL.String())
 		c.collector.IncrementCacheMiss()
 	case http.StatusOK:
-		c.collector.IncrementDownloadedImages()
+		c.collector.IncrementDownloads()
 	case 0:
 		// occurs when just visting directories through browser, swallow
 	default:

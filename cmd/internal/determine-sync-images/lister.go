@@ -174,7 +174,7 @@ func (s *SyncLister) DetermineKernelSyncList() ([]api.Kernel, error) {
 	}
 
 	var result []api.Kernel
-	cachedKernelURLS := map[string]bool{}
+	urls := map[string]bool{}
 
 	for _, p := range resp.Partition {
 		if p.Bootconfig == nil {
@@ -183,7 +183,7 @@ func (s *SyncLister) DetermineKernelSyncList() ([]api.Kernel, error) {
 
 		kernelURL := p.Bootconfig.Kernelurl
 
-		if cachedKernelURLS[kernelURL] {
+		if urls[kernelURL] {
 			continue
 		}
 
@@ -208,6 +208,7 @@ func (s *SyncLister) DetermineKernelSyncList() ([]api.Kernel, error) {
 			URL:     kernelURL,
 			Size:    size,
 		})
+		urls[kernelURL] = true
 	}
 
 	return result, nil
@@ -220,7 +221,7 @@ func (s *SyncLister) DetermineBootImageSyncList() ([]api.BootImage, error) {
 	}
 
 	var result []api.BootImage
-	cachedBootImageURLS := map[string]bool{}
+	urls := map[string]bool{}
 
 	for _, p := range resp.Partition {
 		if p.Bootconfig == nil {
@@ -229,7 +230,7 @@ func (s *SyncLister) DetermineBootImageSyncList() ([]api.BootImage, error) {
 
 		bootImageURL := p.Bootconfig.Imageurl
 
-		if cachedBootImageURLS[bootImageURL] {
+		if urls[bootImageURL] {
 			continue
 		}
 
@@ -261,6 +262,7 @@ func (s *SyncLister) DetermineBootImageSyncList() ([]api.BootImage, error) {
 			URL:     bootImageURL,
 			Size:    size,
 		})
+		urls[bootImageURL] = true
 	}
 
 	return result, nil

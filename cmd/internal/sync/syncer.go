@@ -228,14 +228,15 @@ func (s *Syncer) download(rootPath string, e api.CacheEntity) error {
 		_ = s.fs.Remove(tmpTargetPath)
 	}()
 
-	switch e.(type) {
-	case *api.OS:
+	switch ent := e.(type) {
+	case api.OS:
 		s.imageCollector.AddSyncDownloadImageBytes(n)
 		s.imageCollector.IncrementSyncDownloadImageCount()
-	case *api.BootImage:
-	case *api.Kernel:
-	case *api.LocalFile:
+	case api.BootImage:
+	case api.Kernel:
+	case api.LocalFile:
 	default:
+		s.logger.Errorw("unexpected entity type for metrics collection: %v", ent)
 	}
 
 	err = s.fs.Rename(tmpTargetPath, targetPath)

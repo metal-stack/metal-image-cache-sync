@@ -1,9 +1,12 @@
 package synclister
 
 import (
+	"context"
 	"fmt"
+	"net/http"
 	"net/url"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -17,24 +20,28 @@ import (
 )
 
 type SyncLister struct {
-	logger    *zap.SugaredLogger
-	driver    *metalgo.Driver
-	config    *api.Config
-	s3        *s3.S3
-	collector *metrics.Collector
+	logger         *zap.SugaredLogger
+	driver         *metalgo.Driver
+	config         *api.Config
+	s3             *s3.S3
+	stop           context.Context
+	imageCollector *metrics.ImageCollector
+	httpClient     *http.Client
 }
 
-func NewSyncLister(logger *zap.SugaredLogger, driver *metalgo.Driver, s3 *s3.S3, collector *metrics.Collector, config *api.Config) *SyncLister {
+func NewSyncLister(logger *zap.SugaredLogger, driver *metalgo.Driver, s3 *s3.S3, imageCollector *metrics.ImageCollector, config *api.Config, stop context.Context) *SyncLister {
 	return &SyncLister{
-		logger:    logger,
-		driver:    driver,
-		config:    config,
-		s3:        s3,
-		collector: collector,
+		logger:         logger,
+		driver:         driver,
+		config:         config,
+		s3:             s3,
+		stop:           stop,
+		imageCollector: imageCollector,
+		httpClient:     http.DefaultClient,
 	}
 }
 
-func (s *SyncLister) DetermineSyncList() ([]api.OS, error) {
+func (s *SyncLister) DetermineImageSyncList() ([]api.OS, error) {
 	s3Images, err := s.retrieveImagesFromS3()
 	if err != nil {
 		return nil, errors.Wrap(err, "error listing images in s3")
@@ -45,21 +52,13 @@ func (s *SyncLister) DetermineSyncList() ([]api.OS, error) {
 		return nil, errors.Wrap(err, "error listing images")
 	}
 
-	s.collector.SetMetalAPIImageCount(len(resp.Image))
+	s.imageCollector.SetMetalAPIImageCount(len(resp.Image))
 
 	expirationGraceDays := 24 * time.Hour * time.Duration(s.config.ExpirationGraceDays)
 
 	images := api.OSImagesByOS{}
 	for _, img := range resp.Image {
-		skip := false
-		for _, exclude := range s.config.ExcludePaths {
-			if strings.Contains(img.URL, exclude) {
-				skip = true
-				break
-			}
-		}
-
-		if skip {
+		if s.isExcluded(img.URL) {
 			s.logger.Debugw("skipping image with exclude URL", "id", *img.ID)
 			continue
 		}
@@ -106,12 +105,13 @@ func (s *SyncLister) DetermineSyncList() ([]api.OS, error) {
 		}
 
 		imageVersions = append(imageVersions, api.OS{
-			Name:      os,
-			Version:   ver,
-			ApiRef:    *img,
-			BucketKey: bucketKey,
-			ImageRef:  s3Image,
-			MD5Ref:    s3MD5,
+			Name:       os,
+			Version:    ver,
+			ApiRef:     *img,
+			BucketKey:  bucketKey,
+			BucketName: s.config.ImageBucket,
+			ImageRef:   s3Image,
+			MD5Ref:     s3MD5,
 		})
 
 		versions[majorMinor] = imageVersions
@@ -121,12 +121,13 @@ func (s *SyncLister) DetermineSyncList() ([]api.OS, error) {
 	var sizeCount int64
 	var syncImages []api.OS
 	for _, versions := range images {
-		for _, images := range versions {
-			sort.Slice(images, func(i, j int) bool {
-				return images[i].Version.GreaterThan(images[j].Version)
+		for _, versionedImages := range versions {
+			versionedImages := versionedImages
+			sort.Slice(versionedImages, func(i, j int) bool {
+				return versionedImages[i].Version.GreaterThan(versionedImages[j].Version)
 			})
 			amount := 0
-			for _, img := range images {
+			for _, img := range versionedImages {
 				if s.config.MaxImagesPerName > 0 && amount >= s.config.MaxImagesPerName {
 					break
 				}
@@ -151,9 +152,146 @@ func (s *SyncLister) DetermineSyncList() ([]api.OS, error) {
 		}
 	}
 
-	s.collector.SetUnsyncedImageCount(len(resp.Image) - len(syncImages))
+	s.imageCollector.SetUnsyncedImageCount(len(resp.Image) - len(syncImages))
 
 	return syncImages, nil
+}
+
+func (s *SyncLister) isExcluded(url string) bool {
+	for _, exclude := range s.config.ExcludePaths {
+		if strings.Contains(url, exclude) {
+			return true
+		}
+	}
+
+	return false
+}
+
+func (s *SyncLister) DetermineKernelSyncList() ([]api.Kernel, error) {
+	resp, err := s.driver.PartitionList()
+	if err != nil {
+		return nil, errors.Wrap(err, "error listing partitions")
+	}
+
+	var result []api.Kernel
+	urls := map[string]bool{}
+
+	for _, p := range resp.Partition {
+		if p.Bootconfig == nil {
+			continue
+		}
+
+		kernelURL := p.Bootconfig.Kernelurl
+
+		if urls[kernelURL] {
+			continue
+		}
+
+		if s.isExcluded(kernelURL) {
+			s.logger.Debugw("skipping kernel with exclude URL", "url", kernelURL)
+			continue
+		}
+
+		u, err := url.Parse(kernelURL)
+		if err != nil {
+			s.logger.Errorw("kernel url is invalid, skipping", "error", err)
+			continue
+		}
+
+		size, err := retrieveContentLength(s.stop, s.httpClient, u.String())
+		if err != nil {
+			s.logger.Warnw("unable to determine kernel download size", "error", err)
+		}
+
+		result = append(result, api.Kernel{
+			SubPath: strings.TrimPrefix(u.Path, "/"),
+			URL:     kernelURL,
+			Size:    size,
+		})
+		urls[kernelURL] = true
+	}
+
+	return result, nil
+}
+
+func (s *SyncLister) DetermineBootImageSyncList() ([]api.BootImage, error) {
+	resp, err := s.driver.PartitionList()
+	if err != nil {
+		return nil, errors.Wrap(err, "error listing partitions")
+	}
+
+	var result []api.BootImage
+	urls := map[string]bool{}
+
+	for _, p := range resp.Partition {
+		if p.Bootconfig == nil {
+			continue
+		}
+
+		bootImageURL := p.Bootconfig.Imageurl
+
+		if urls[bootImageURL] {
+			continue
+		}
+
+		if s.isExcluded(bootImageURL) {
+			s.logger.Debugw("skipping boot image with exclude URL", "url", bootImageURL)
+			continue
+		}
+
+		u, err := url.Parse(bootImageURL)
+		if err != nil {
+			s.logger.Errorw("boot image url is invalid, skipping", "error", err)
+			continue
+		}
+
+		size, err := retrieveContentLength(s.stop, s.httpClient, u.String())
+		if err != nil {
+			s.logger.Warnw("unable to determine boot image download size", "error", err)
+		}
+
+		md5URL := u.String() + ".md5"
+		_, err = retrieveContentLength(s.stop, s.httpClient, md5URL)
+		if err != nil {
+			s.logger.Errorw("boot image md5 does not exist, skipping", "url", md5URL, "error", err)
+			continue
+		}
+
+		result = append(result, api.BootImage{
+			SubPath: strings.TrimPrefix(u.Path, "/"),
+			URL:     bootImageURL,
+			Size:    size,
+		})
+		urls[bootImageURL] = true
+	}
+
+	return result, nil
+}
+
+func retrieveContentLength(ctx context.Context, c *http.Client, url string) (int64, error) {
+	req, err := http.NewRequest(http.MethodHead, url, nil)
+	if err != nil {
+		return 0, errors.Wrap(err, "unable to create head request")
+	}
+
+	req = req.WithContext(ctx)
+
+	resp, err := c.Do(req)
+	if err != nil {
+		return 0, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return 0, fmt.Errorf("head request to url did not return OK: %s", url)
+	}
+
+	size, err := strconv.Atoi(resp.Header.Get("Content-Length"))
+	if err != nil {
+		return 0, errors.Wrap(err, "content-length header value could not be converted to integer")
+	}
+
+	return int64(size), nil
 }
 
 func (s *SyncLister) reduce(images []api.OS, sizeCount int64) ([]api.OS, int64, error) {

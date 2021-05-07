@@ -16,11 +16,14 @@ release:: all;
 
 .PHONY: start
 start: all
+	mkdir -p /tmp/metal-image-cache
 	bin/metal-image-cache-sync \
-	#   --log-level debug \
+	  --log-level debug \
 	  --metal-api-endpoint $(METAL_API_ENDPOINT) \
 	  --metal-api-hmac $(METAL_API_HMAC) \
 	  --max-cache-size 10G \
 	  --min-images-per-name 2 \
-	  --root-path /tmp/metal-image-cache \
-	  --dry-run
+	  --cache-root-path /tmp/metal-image-cache \
+	  --enable-kernel-cache \
+	  --enable-boot-image-cache \
+	#   --dry-run

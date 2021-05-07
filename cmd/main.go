@@ -71,7 +71,6 @@ func main() {
 }
 
 func init() {
-	rootCmd.Flags().String("bind-address", "127.0.0.1:3000", "http server bind address")
 	rootCmd.Flags().String("log-level", "info", "sets the application log level")
 
 	rootCmd.Flags().String("image-store", "metal-stack.io", "url to the image store")
@@ -89,7 +88,16 @@ func init() {
 
 	rootCmd.Flags().Uint("expiration-grace-period", 0, "the amount of days to still sync images even if they have already expired in the metal-api (defaults to zero)")
 
-	rootCmd.Flags().String("root-path", "/var/lib/metal-image-cache-sync/images", "root path of where to store the images")
+	rootCmd.Flags().String("cache-root-path", "/var/lib/metal-image-cache-sync", "root path of where to store the cached entities")
+
+	rootCmd.Flags().String("image-cache-bind-address", "0.0.0.0:3000", "image cache http server bind address")
+
+	rootCmd.Flags().Bool("enable-kernel-cache", true, "enables caching kernels used for PXE booting inside partitions")
+	rootCmd.Flags().String("kernel-cache-bind-address", "0.0.0.0:3001", "kernel cache http server bind address")
+
+	rootCmd.Flags().Bool("enable-boot-image-cache", true, "enables caching initrd images used for PXE booting inside partitions")
+	rootCmd.Flags().String("boot-image-cache-bind-address", "0.0.0.0:3002", "kernel cache http server bind address")
+
 	rootCmd.Flags().StringSlice("excludes", []string{"/pull_requests/"}, "url paths to exclude from the sync")
 
 	err := viper.BindPFlags(rootCmd.Flags())
@@ -170,7 +178,9 @@ func run() error {
 		return err
 	}
 
-	collector := metrics.MustMetrics(logger.Named("metrics"), c)
+	imageCollector := metrics.MustImageMetrics(logger.Named("metrics"), c.GetImageRootPath())
+	kernelCollector := metrics.MustKernelMetrics(logger.Named("metrics"), c.GetKernelRootPath())
+	bootImageCollector := metrics.MustBootImageMetrics(logger.Named("metrics"), c.GetBootImageRootPath())
 
 	dummyRegion := "dummy" // we don't use AWS S3, we don't need a proper region
 	ss, err := session.NewSession(&aws.Config{
@@ -190,9 +200,9 @@ func run() error {
 	s3Client := s3.New(ss)
 	s3Downloader := s3manager.NewDownloader(ss)
 
-	lister = synclister.NewSyncLister(logger.Named("sync-lister"), driver, s3Client, collector, c)
+	lister = synclister.NewSyncLister(logger.Named("sync-lister"), driver, s3Client, imageCollector, c, stop)
 
-	syncer, err = sync.NewSyncer(logger.Named("syncer"), fs, s3Downloader, c, collector, stop)
+	syncer, err = sync.NewSyncer(logger.Named("syncer"), fs, s3Downloader, c, imageCollector, stop)
 	if err != nil {
 		logger.Errorw("cannot create syncer", "error", err)
 		return err
@@ -203,7 +213,7 @@ func run() error {
 	))
 
 	id, err := cronjob.AddFunc(c.SyncSchedule, func() {
-		err := syncImages(driver)
+		err := runSync(c)
 		if err != nil {
 			logger.Errorw("error during sync", "error", err)
 		}
@@ -216,49 +226,50 @@ func run() error {
 		return errors.Wrap(err, "could not initialize cron schedule")
 	}
 
-	logger.Infow("start metal stack image sync", "version", v.V.String())
-
-	router := http.NewServeMux()
-
-	router.Handle("/metrics", promhttp.Handler())
-	router.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
-		_, err := w.Write([]byte("HEALTHY"))
-		if err != nil {
-			logger.Errorw("health endpoint could not write response body", "error", err)
-		}
-	})
-	serveDir := http.FileServer(http.Dir(c.ImageCacheRootPath))
-	router.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		logger.Infow("serving image cache download request", "url", r.URL.String(), "from", r.RemoteAddr)
-		hw := utils.NewHTTPStatusResponseWriter(w)
-		serveDir.ServeHTTP(hw, r)
-		switch code := hw.GetStatus(); code {
-		case http.StatusNotFound:
-			logger.Infow("cache miss", "url", r.URL.String())
-			collector.IncrementCacheMiss()
-		case http.StatusOK:
-			collector.IncrementDownloadedImages()
-		default:
-			logger.Infow("responded with error code for image download", "url", r.URL.String(), "code", code)
-		}
-	})
-
-	srv := &http.Server{
-		Addr:    c.BindAddress,
-		Handler: router,
+	handlers := []cacheFileHandler{newCacheFileHandler(c.ImageCacheBindAddress, c.GetImageRootPath(), imageCollector)}
+	if c.KernelCacheEnabled {
+		handlers = append(handlers, newCacheFileHandler(c.KernelCacheBindAddress, c.GetKernelRootPath(), kernelCollector))
+	}
+	if c.BootImageCacheEnabled {
+		handlers = append(handlers, newCacheFileHandler(c.BootImageCacheBindAddress, c.GetBootImageRootPath(), bootImageCollector))
 	}
 
-	go func() {
-		logger.Infow("starting to serve files", "bind-address", c.BindAddress)
-		err := srv.ListenAndServe()
-		if err != nil {
-			if err != http.ErrServerClosed {
-				logger.Fatalw("error starting http server, shutting down...", "error", err)
-			}
-		}
-	}()
+	logger.Infow("start metal stack image sync", "version", v.V.String())
 
-	err = syncImages(driver)
+	var srvs []*http.Server
+	for _, h := range handlers {
+		h := h
+		router := http.NewServeMux()
+
+		router.Handle("/metrics", promhttp.HandlerFor(h.collector.GetGatherer(), promhttp.HandlerOpts{}))
+		router.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+			_, err := w.Write([]byte("HEALTHY"))
+			if err != nil {
+				logger.Errorw("health endpoint could not write response body", "error", err)
+			}
+		})
+		router.HandleFunc("/", h.handle)
+
+		srv := http.Server{
+			Addr:    h.bindAddress,
+			Handler: router,
+		}
+
+		srvs = append(srvs, &srv)
+
+		go func() {
+			logger.Infow("starting to serve files", "bind-address", h.bindAddress, "directory", h.serveDir)
+			err := srv.ListenAndServe()
+			if err != nil {
+				if errors.Is(err, http.ErrServerClosed) {
+					logger.Fatalw("error starting http server, shutting down...", "error", err)
+				}
+			}
+		}()
+
+	}
+
+	err = runSync(c)
 	if err != nil {
 		logger.Errorw("error during initial sync", "error", err)
 	}
@@ -268,24 +279,122 @@ func run() error {
 	<-stop.Done()
 	logger.Info("received stop signal, shutting down...")
 	cronjob.Stop()
-	err = srv.Close()
-	if err != nil {
-		logger.Errorw("error shutting down http server", "error", err)
+
+	for _, srv := range srvs {
+		err = srv.Close()
+		if err != nil {
+			logger.Errorw("error shutting down http server", "error", err)
+		}
 	}
 
 	return nil
 
 }
 
-func syncImages(driver *metalgo.Driver) error {
-	syncImages, err := lister.DetermineSyncList()
+type cacheFileHandler struct {
+	serveDir     string
+	serveHandler http.Handler
+	collector    metrics.DownloadCollector
+	bindAddress  string
+}
+
+func newCacheFileHandler(bindAddr, serveDir string, collector metrics.DownloadCollector) cacheFileHandler {
+	return cacheFileHandler{
+		serveDir:     serveDir,
+		serveHandler: http.FileServer(http.Dir(serveDir)),
+		collector:    collector,
+		bindAddress:  bindAddr,
+	}
+}
+
+func (c *cacheFileHandler) handle(w http.ResponseWriter, r *http.Request) {
+	logger.Infow("serving cache download request", "url", r.URL.String(), "from", r.RemoteAddr)
+	hw := utils.NewHTTPRedirectResponseWriter(w, r)
+	c.serveHandler.ServeHTTP(hw, r)
+	switch code := hw.GetStatus(); code {
+	case http.StatusTemporaryRedirect:
+		logger.Infow("cache miss", "url", r.URL.String())
+		c.collector.IncrementCacheMiss()
+	case http.StatusOK:
+		c.collector.IncrementDownloads()
+	case 0:
+		// occurs when just visting directories through browser, swallow
+	default:
+		logger.Infow("responded with error code for download", "url", r.URL.String(), "code", code)
+	}
+}
+
+func runSync(c *api.Config) error {
+	var errs []error
+
+	err := func() error {
+		syncImages, err := lister.DetermineImageSyncList()
+		if err != nil {
+			return errors.Wrap(err, "cannot gather images")
+		}
+
+		var converted api.CacheEntities
+		for _, s := range syncImages {
+			converted = append(converted, s)
+		}
+
+		err = syncer.Sync(c.GetImageRootPath(), converted)
+		if err != nil {
+			return errors.Wrap(err, "error during image sync")
+		}
+
+		return nil
+	}()
 	if err != nil {
-		return errors.Wrap(err, "cannot gather images")
+		errs = append(errs, err)
 	}
 
-	err = syncer.Sync(syncImages)
+	err = func() error {
+		syncKernels, err := lister.DetermineKernelSyncList()
+		if err != nil {
+			return errors.Wrap(err, "cannot kernel images")
+		}
+
+		var converted api.CacheEntities
+		for _, s := range syncKernels {
+			converted = append(converted, s)
+		}
+
+		err = syncer.Sync(c.GetKernelRootPath(), converted)
+		if err != nil {
+			return errors.Wrap(err, "error during kernel sync")
+		}
+
+		return nil
+	}()
 	if err != nil {
-		return errors.Wrap(err, "error during image sync")
+		errs = append(errs, err)
+	}
+
+	err = func() error {
+		syncImages, err := lister.DetermineBootImageSyncList()
+		if err != nil {
+			return errors.Wrap(err, "cannot gather boot images")
+		}
+
+		var converted api.CacheEntities
+		for _, s := range syncImages {
+			converted = append(converted, s)
+		}
+
+		err = syncer.Sync(c.GetBootImageRootPath(), converted)
+		if err != nil {
+			return errors.Wrap(err, "error during boot image sync")
+		}
+
+		return nil
+	}()
+	if err != nil {
+		errs = append(errs, err)
+	}
+
+	if len(errs) > 0 {
+		return errors.Errorf("errors occurred during sync: %v", errs)
 	}
 
 	return nil

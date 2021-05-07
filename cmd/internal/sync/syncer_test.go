@@ -30,11 +30,11 @@ const (
 	cacheRoot = "/tmp/test-path"
 )
 
-func TestSyncer_currentImageIndex(t *testing.T) {
+func Test_currentFileIndex(t *testing.T) {
 	tests := []struct {
 		name      string
 		fsModFunc func(t *testing.T, fs afero.Fs)
-		want      []api.OS
+		want      api.CacheEntities
 		wantErr   bool
 	}{
 		{
@@ -53,45 +53,35 @@ func TestSyncer_currentImageIndex(t *testing.T) {
 				createTestFile(t, fs, cacheRoot+"/ubuntu/20.10/20201026/img.tar.lz4")
 				createTestFile(t, fs, cacheRoot+"/ubuntu/20.10/20201026/img.tar.lz4.md5")
 			},
-			want: []api.OS{
-				{
-					BucketKey: "ubuntu/19.04/20201025/img.tar.lz4",
-					Version:   &semver.Version{},
-					ImageRef: s3.Object{
-						Size: int64Ptr(4),
-					},
+			want: api.CacheEntities{
+				api.LocalFile{
+					Name:    "img.tar.lz4",
+					SubPath: "ubuntu/19.04/20201025/img.tar.lz4",
+					Size:    4,
 				},
-				{
-					BucketKey: "ubuntu/19.04/20201026/img.tar.lz4",
-					Version:   &semver.Version{},
-					ImageRef: s3.Object{
-						Size: int64Ptr(4),
-					},
+				api.LocalFile{
+					Name:    "img.tar.lz4",
+					SubPath: "ubuntu/19.04/20201026/img.tar.lz4",
+					Size:    4,
 				},
-				{
-					BucketKey: "ubuntu/20.10/20201026/img.tar.lz4",
-					Version:   &semver.Version{},
-					ImageRef: s3.Object{
-						Size: int64Ptr(4),
-					},
+				api.LocalFile{
+					Name:    "img.tar.lz4",
+					SubPath: "ubuntu/20.10/20201026/img.tar.lz4",
+					Size:    4,
 				},
 			},
 			wantErr: false,
 		},
 	}
 	for _, tt := range tests {
+		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			fs := afero.NewMemMapFs()
 			require.Nil(t, fs.MkdirAll(cacheRoot, 0755))
 			if tt.fsModFunc != nil {
 				tt.fsModFunc(t, fs)
 			}
-			s := &Syncer{
-				logger:   zaptest.NewLogger(t).Sugar(),
-				fs:       fs,
-				rootPath: cacheRoot,
-			}
-			got, err := s.currentImageIndex()
+			got, err := currentFileIndex(fs, cacheRoot)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("Syncer.currentImageIndex() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -154,12 +144,12 @@ func TestSyncer_defineImageDiff(t *testing.T) {
 	tests := []struct {
 		name               string
 		fsModFunc          func(t *testing.T, fs afero.Fs)
-		currentImages      []api.OS
+		currentImages      api.CacheEntities
 		remoteChecksumFile string
-		wantImages         []api.OS
-		remove             []api.OS
-		keep               []api.OS
-		add                []api.OS
+		wantImages         api.CacheEntities
+		remove             api.CacheEntities
+		keep               api.CacheEntities
+		add                api.CacheEntities
 		wantErr            bool
 	}{
 		{
@@ -173,26 +163,30 @@ func TestSyncer_defineImageDiff(t *testing.T) {
 		},
 		{
 			name: "remove unexisting images",
-			currentImages: []api.OS{
-				{
-					BucketKey: "metal-os/master/ubuntu/19.04/20201025/img.tar.lz4",
-					Version:   &semver.Version{},
+			currentImages: api.CacheEntities{
+				api.OS{
+					BucketKey:  "metal-os/master/ubuntu/19.04/20201025/img.tar.lz4",
+					BucketName: "metal-os",
+					Version:    &semver.Version{},
 				},
-				{
-					BucketKey: "metal-os/master/ubuntu/19.04/20201026/img.tar.lz4",
-					Version:   &semver.Version{},
+				api.OS{
+					BucketKey:  "metal-os/master/ubuntu/19.04/20201026/img.tar.lz4",
+					BucketName: "metal-os",
+					Version:    &semver.Version{},
 				},
 			},
 			wantImages: nil,
 			add:        nil,
-			remove: []api.OS{
-				{
-					BucketKey: "metal-os/master/ubuntu/19.04/20201025/img.tar.lz4",
-					Version:   &semver.Version{},
+			remove: api.CacheEntities{
+				api.OS{
+					BucketKey:  "metal-os/master/ubuntu/19.04/20201025/img.tar.lz4",
+					BucketName: "metal-os",
+					Version:    &semver.Version{},
 				},
-				{
-					BucketKey: "metal-os/master/ubuntu/19.04/20201026/img.tar.lz4",
-					Version:   &semver.Version{},
+				api.OS{
+					BucketKey:  "metal-os/master/ubuntu/19.04/20201026/img.tar.lz4",
+					BucketName: "metal-os",
+					Version:    &semver.Version{},
 				},
 			},
 			wantErr: false,
@@ -200,28 +194,32 @@ func TestSyncer_defineImageDiff(t *testing.T) {
 		{
 			name:          "add new images",
 			currentImages: nil,
-			wantImages: []api.OS{
-				{
-					Name:      "ubuntu",
-					Version:   semver.MustParse("19.04"),
-					BucketKey: "metal-os/master/ubuntu/19.04/20201025/img.tar.lz4",
+			wantImages: api.CacheEntities{
+				api.OS{
+					Name:       "ubuntu",
+					Version:    semver.MustParse("19.04"),
+					BucketKey:  "metal-os/master/ubuntu/19.04/20201025/img.tar.lz4",
+					BucketName: "metal-os",
 				},
-				{
-					Name:      "debian",
-					Version:   semver.MustParse("20.04"),
-					BucketKey: "metal-os/master/ubuntu/20.04/20201025/img.tar.lz4",
+				api.OS{
+					Name:       "debian",
+					Version:    semver.MustParse("20.04"),
+					BucketKey:  "metal-os/master/ubuntu/20.04/20201025/img.tar.lz4",
+					BucketName: "metal-os",
 				},
 			},
-			add: []api.OS{
-				{
-					Name:      "ubuntu",
-					Version:   semver.MustParse("19.04"),
-					BucketKey: "metal-os/master/ubuntu/19.04/20201025/img.tar.lz4",
+			add: api.CacheEntities{
+				api.OS{
+					Name:       "ubuntu",
+					Version:    semver.MustParse("19.04"),
+					BucketKey:  "metal-os/master/ubuntu/19.04/20201025/img.tar.lz4",
+					BucketName: "metal-os",
 				},
-				{
-					Name:      "debian",
-					Version:   semver.MustParse("20.04"),
-					BucketKey: "metal-os/master/ubuntu/20.04/20201025/img.tar.lz4",
+				api.OS{
+					Name:       "debian",
+					Version:    semver.MustParse("20.04"),
+					BucketKey:  "metal-os/master/ubuntu/20.04/20201025/img.tar.lz4",
+					BucketName: "metal-os",
 				},
 			},
 			remove:  nil,
@@ -229,17 +227,19 @@ func TestSyncer_defineImageDiff(t *testing.T) {
 		},
 		{
 			name: "don't download existing images when checksum is proper",
-			currentImages: []api.OS{
-				{
-					BucketKey: "metal-os/master/ubuntu/19.04/20201025/img.tar.lz4",
-					Version:   &semver.Version{},
+			currentImages: api.CacheEntities{
+				api.OS{
+					BucketKey:  "metal-os/master/ubuntu/19.04/20201025/img.tar.lz4",
+					BucketName: "metal-os",
+					Version:    &semver.Version{},
 				},
 			},
-			wantImages: []api.OS{
-				{
-					Name:      "ubuntu",
-					Version:   semver.MustParse("19.04.20201025"),
-					BucketKey: "metal-os/master/ubuntu/19.04/20201025/img.tar.lz4",
+			wantImages: api.CacheEntities{
+				api.OS{
+					Name:       "ubuntu",
+					Version:    semver.MustParse("19.04.20201025"),
+					BucketKey:  "metal-os/master/ubuntu/19.04/20201025/img.tar.lz4",
+					BucketName: "metal-os",
 					MD5Ref: s3.Object{
 						Key: strPtr("metal-os/master/ubuntu/19.04/20201025/img.tar.lz4.md5"),
 					},
@@ -249,11 +249,12 @@ func TestSyncer_defineImageDiff(t *testing.T) {
 				createTestFile(t, fs, cacheRoot+"/metal-os/master/ubuntu/19.04/20201025/img.tar.lz4")
 			},
 			add: nil,
-			keep: []api.OS{
-				{
-					Name:      "ubuntu",
-					Version:   semver.MustParse("19.04.20201025"),
-					BucketKey: "metal-os/master/ubuntu/19.04/20201025/img.tar.lz4",
+			keep: api.CacheEntities{
+				api.OS{
+					Name:       "ubuntu",
+					Version:    semver.MustParse("19.04.20201025"),
+					BucketKey:  "metal-os/master/ubuntu/19.04/20201025/img.tar.lz4",
+					BucketName: "metal-os",
 					MD5Ref: s3.Object{
 						Key: strPtr("metal-os/master/ubuntu/19.04/20201025/img.tar.lz4.md5"),
 					},
@@ -264,17 +265,19 @@ func TestSyncer_defineImageDiff(t *testing.T) {
 		},
 		{
 			name: "download existing images when checksum is incorrect",
-			currentImages: []api.OS{
-				{
-					BucketKey: "metal-os/master/ubuntu/19.04/20201025/img.tar.lz4",
-					Version:   &semver.Version{},
+			currentImages: api.CacheEntities{
+				api.OS{
+					BucketKey:  "metal-os/master/ubuntu/19.04/20201025/img.tar.lz4",
+					BucketName: "metal-os",
+					Version:    &semver.Version{},
 				},
 			},
-			wantImages: []api.OS{
-				{
-					Name:      "ubuntu",
-					Version:   semver.MustParse("19.04.20201025"),
-					BucketKey: "metal-os/master/ubuntu/19.04/20201025/img.tar.lz4",
+			wantImages: api.CacheEntities{
+				api.OS{
+					Name:       "ubuntu",
+					Version:    semver.MustParse("19.04.20201025"),
+					BucketKey:  "metal-os/master/ubuntu/19.04/20201025/img.tar.lz4",
+					BucketName: "metal-os",
 					MD5Ref: s3.Object{
 						Key: strPtr("metal-os/master/ubuntu/19.04/20201025/img.tar.lz4.md5"),
 					},
@@ -284,11 +287,12 @@ func TestSyncer_defineImageDiff(t *testing.T) {
 				createTestFile(t, fs, cacheRoot+"/metal-os/master/ubuntu/19.04/20201025/img.tar.lz4")
 			},
 			remoteChecksumFile: "not-equal",
-			add: []api.OS{
-				{
-					Name:      "ubuntu",
-					Version:   semver.MustParse("19.04.20201025"),
-					BucketKey: "metal-os/master/ubuntu/19.04/20201025/img.tar.lz4",
+			add: api.CacheEntities{
+				api.OS{
+					Name:       "ubuntu",
+					Version:    semver.MustParse("19.04.20201025"),
+					BucketKey:  "metal-os/master/ubuntu/19.04/20201025/img.tar.lz4",
+					BucketName: "metal-os",
 					MD5Ref: s3.Object{
 						Key: strPtr("metal-os/master/ubuntu/19.04/20201025/img.tar.lz4.md5"),
 					},
@@ -299,6 +303,7 @@ func TestSyncer_defineImageDiff(t *testing.T) {
 		},
 	}
 	for _, tt := range tests {
+		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			fs := afero.NewMemMapFs()
 			require.Nil(t, fs.MkdirAll(cacheRoot, 0755))
@@ -314,15 +319,13 @@ func TestSyncer_defineImageDiff(t *testing.T) {
 			s3Client, _, _ := dlLoggingSvc([]byte(remoteChecksumFile))
 			d := s3manager.NewDownloaderWithClient(s3Client)
 			s := &Syncer{
-				logger:     zaptest.NewLogger(t).Sugar(),
-				fs:         fs,
-				rootPath:   cacheRoot,
-				s3:         d,
-				bucketName: "metal-os",
-				stop:       context.TODO(),
+				logger: zaptest.NewLogger(t).Sugar(),
+				fs:     fs,
+				s3:     d,
+				stop:   context.TODO(),
 			}
 
-			gotRemove, gotKeep, gotAdd, err := s.defineImageDiff(tt.currentImages, tt.wantImages)
+			gotRemove, gotKeep, gotAdd, err := s.defineDiff(cacheRoot, tt.currentImages, tt.wantImages)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("Syncer.defineImageDiff() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -342,8 +345,4 @@ func TestSyncer_defineImageDiff(t *testing.T) {
 
 func strPtr(s string) *string {
 	return &s
-}
-
-func int64Ptr(i int64) *int64 {
-	return &i
 }

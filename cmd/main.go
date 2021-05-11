@@ -243,7 +243,7 @@ func run() error {
 	var p tcpproxy.Proxy
 	if c.IsHTTPSForwardingEnabled() {
 		for _, domain := range c.FordwardProxyDomains {
-			p.AddSNIRoute(":443", domain, tcpproxy.To(fmt.Sprintf("%s:443", domain)))
+			p.AddSNIRoute("0.0.0.0:443", domain, tcpproxy.To(fmt.Sprintf("%s:443", domain)))
 		}
 		err = p.Start()
 		if err != nil {

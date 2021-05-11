@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"net/http"
 	"strings"
@@ -27,6 +28,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"go.uber.org/zap"
+	"go.universe.tf/tcpproxy"
 	"sigs.k8s.io/controller-runtime/pkg/manager/signals"
 )
 
@@ -97,6 +99,8 @@ func init() {
 
 	rootCmd.Flags().Bool("enable-boot-image-cache", true, "enables caching initrd images used for PXE booting inside partitions")
 	rootCmd.Flags().String("boot-image-cache-bind-address", "0.0.0.0:3002", "kernel cache http server bind address")
+
+	rootCmd.Flags().StringSlice("https-forward-proxy-domains", []string{"github.com", "images.metal-stack.io"}, "if set transparently proxies https traffic of the given domains")
 
 	rootCmd.Flags().StringSlice("excludes", []string{"/pull_requests/"}, "url paths to exclude from the sync")
 
@@ -236,6 +240,19 @@ func run() error {
 
 	logger.Infow("start metal stack image sync", "version", v.V.String())
 
+	var p tcpproxy.Proxy
+	if c.IsHTTPSForwardingEnabled() {
+		for _, domain := range c.FordwardProxyDomains {
+			p.AddSNIRoute(":443", domain, tcpproxy.To(fmt.Sprintf("%s:443", domain)))
+		}
+		err = p.Start()
+		if err != nil {
+			return errors.Wrap(err, "could not start tcpproxy to forward HTTPS cache misses")
+		}
+
+		logger.Infow("starting to forward HTTPS domains", "domains", c.FordwardProxyDomains)
+	}
+
 	var srvs []*http.Server
 	for _, h := range handlers {
 		h := h
@@ -266,7 +283,6 @@ func run() error {
 				}
 			}
 		}()
-
 	}
 
 	err = runSync(c)
@@ -284,6 +300,13 @@ func run() error {
 		err = srv.Close()
 		if err != nil {
 			logger.Errorw("error shutting down http server", "error", err)
+		}
+	}
+
+	if c.IsHTTPSForwardingEnabled() {
+		err := p.Close()
+		if err != nil {
+			logger.Errorw("error shutting down tcpproxy", "error", err)
 		}
 	}
 

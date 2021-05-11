@@ -26,4 +26,5 @@ start: all
 	  --cache-root-path /tmp/metal-image-cache \
 	  --enable-kernel-cache \
 	  --enable-boot-image-cache \
+	  --https-forward-proxy-domains "" \
 	#   --dry-run

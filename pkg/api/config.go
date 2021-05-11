@@ -38,6 +38,8 @@ type Config struct {
 	ImageBucket string `validate:"required"`
 
 	ExpirationGraceDays uint
+
+	FordwardProxyDomains []string
 }
 
 func NewConfig() (*Config, error) {
@@ -58,6 +60,7 @@ func NewConfig() (*Config, error) {
 		DryRun:                    viper.GetBool("dry-run"),
 		ExcludePaths:              viper.GetStringSlice("excludes"),
 		ExpirationGraceDays:       viper.GetUint("expiration-grace-period"),
+		FordwardProxyDomains:      viper.GetStringSlice("https-forward-proxy-domains"),
 	}
 
 	var err error
@@ -83,6 +86,10 @@ func (c *Config) GetKernelRootPath() string {
 
 func (c *Config) GetBootImageRootPath() string {
 	return path.Join(c.CacheRootPath, "boot-images")
+}
+
+func (c *Config) IsHTTPSForwardingEnabled() bool {
+	return len(c.FordwardProxyDomains) > 0
 }
 
 func (c *Config) Validate(fs afero.Fs) error {

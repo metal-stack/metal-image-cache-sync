@@ -102,22 +102,22 @@ func (s *Syncer) Sync(rootPath string, entitiesToSync api.CacheEntities) error {
 
 func currentFileIndex(fs afero.Fs, rootPath string) (api.CacheEntities, error) {
 	var result api.CacheEntities
-	err := afero.Walk(fs, rootPath, func(p string, info os.FileInfo, innerErr error) error {
+	err := afero.Walk(fs, rootPath, func(path string, info os.FileInfo, innerErr error) error {
 		if innerErr != nil {
-			return errors.Wrap(innerErr, "error while walking through cache root")
+			return errors.Wrap(innerErr, fmt.Sprintf("error while walking through root path %s", rootPath))
 		}
 
 		if info.IsDir() {
 			return nil
 		}
 
-		if strings.HasSuffix(p, ".md5") {
+		if strings.HasSuffix(path, ".md5") {
 			return nil
 		}
 
 		result = append(result, api.LocalFile{
 			Name:    info.Name(),
-			SubPath: p[len(rootPath)+1:],
+			SubPath: path[len(rootPath)+1:],
 			Size:    info.Size(),
 		})
 
@@ -317,11 +317,7 @@ func (s *Syncer) printSyncPlan(remove api.CacheEntities, keep []api.CacheEntity,
 }
 
 func cleanEmptyDirs(fs afero.Fs, rootPath string) error {
-	err := afero.Walk(fs, rootPath, func(path string, info os.FileInfo, innerErr error) error {
-		if innerErr != nil {
-			return errors.Wrap(innerErr, "error while walking through cache root")
-		}
-
+	err := afero.Walk(fs, rootPath, func(path string, info os.FileInfo, _ error) error {
 		if !info.IsDir() {
 			return nil
 		}

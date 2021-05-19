@@ -101,7 +101,7 @@ func (s *Syncer) Sync(rootPath string, entitiesToSync api.CacheEntities) error {
 
 func currentFileIndex(fs afero.Fs, rootPath string) (api.CacheEntities, error) {
 	var result api.CacheEntities
-	err := afero.Walk(fs, rootPath, func(path string, info os.FileInfo, innerErr error) error {
+	err := afero.Walk(fs, rootPath, func(p string, info os.FileInfo, innerErr error) error {
 		if innerErr != nil {
 			return errors.Wrap(innerErr, fmt.Sprintf("error while walking through root path %s", rootPath))
 		}
@@ -110,13 +110,13 @@ func currentFileIndex(fs afero.Fs, rootPath string) (api.CacheEntities, error) {
 			return nil
 		}
 
-		if strings.HasSuffix(path, ".md5") {
+		if strings.HasSuffix(p, ".md5") {
 			return nil
 		}
 
 		result = append(result, api.LocalFile{
 			Name:    info.Name(),
-			SubPath: path[len(rootPath)+1:],
+			SubPath: p[len(rootPath)+1:],
 			Size:    info.Size(),
 		})
 

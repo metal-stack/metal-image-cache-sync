@@ -2,7 +2,6 @@ package sync
 
 import (
 	"context"
-	"io/ioutil"
 
 	// nolint
 	"crypto/md5"
@@ -317,29 +316,54 @@ func (s *Syncer) printSyncPlan(remove api.CacheEntities, keep []api.CacheEntity,
 }
 
 func cleanEmptyDirs(fs afero.Fs, rootPath string) error {
-	err := afero.Walk(fs, rootPath, func(path string, info os.FileInfo, _ error) error {
-		if !info.IsDir() {
-			return nil
-		}
-
-		files, err := ioutil.ReadDir(path)
-		if err != nil {
-			return err
-		}
-
-		if len(files) != 0 {
-			return nil
-		}
-
-		err = os.Remove(path)
-		if err != nil {
-			return err
-		}
-
-		return nil
-	})
+	files, err := afero.ReadDir(fs, rootPath)
 	if err != nil {
 		return err
+	}
+
+	for _, info := range files {
+		if !info.IsDir() {
+			continue
+		}
+
+		err = recurseCleanEmptyDirs(fs, path.Join(rootPath, info.Name()))
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func recurseCleanEmptyDirs(fs afero.Fs, p string) error {
+	files, err := afero.ReadDir(fs, p)
+	if err != nil {
+		return err
+	}
+
+	for _, info := range files {
+		if !info.IsDir() {
+			continue
+		}
+
+		nested := path.Join(p, info.Name())
+		err = recurseCleanEmptyDirs(fs, nested)
+		if err != nil {
+			return err
+		}
+	}
+
+	// re-read files because directories could delete themselves in first loop
+	files, err = afero.ReadDir(fs, p)
+	if err != nil {
+		return err
+	}
+
+	if len(files) == 0 {
+		err = fs.Remove(p)
+		if err != nil {
+			return err
+		}
 	}
 
 	return nil

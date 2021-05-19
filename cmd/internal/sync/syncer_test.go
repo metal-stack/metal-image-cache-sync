@@ -22,6 +22,7 @@ import (
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/metal-stack/metal-image-cache-sync/pkg/api"
 	"github.com/spf13/afero"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap/zaptest"
 )
@@ -94,12 +95,16 @@ func Test_currentFileIndex(t *testing.T) {
 }
 
 func createTestFile(t *testing.T, fs afero.Fs, p string) {
-	require.Nil(t, fs.MkdirAll(path.Base(p), 0755))
+	createTestDir(t, fs, path.Base(p))
 	f, err := fs.Create(p)
 	require.Nil(t, err)
 	defer f.Close()
 	_, err = f.WriteString("Test")
 	require.Nil(t, err)
+}
+
+func createTestDir(t *testing.T, fs afero.Fs, p string) {
+	require.Nil(t, fs.MkdirAll(p, 0755))
 }
 
 func dlLoggingSvc(data []byte) (*s3.S3, *[]string, *[]string) {
@@ -345,4 +350,131 @@ func TestSyncer_defineImageDiff(t *testing.T) {
 
 func strPtr(s string) *string {
 	return &s
+}
+
+func Test_cleanEmptyDirs(t *testing.T) {
+	tests := []struct {
+		name        string
+		fsModFunc   func(t *testing.T, fs afero.Fs)
+		fsCheckFunc func(t *testing.T, fs afero.Fs)
+		wantErr     error
+	}{
+		{
+			name:      "no directory contents, nothing happens",
+			fsModFunc: nil,
+			wantErr:   nil,
+		},
+		{
+			name: "flat deletion",
+			fsModFunc: func(t *testing.T, fs afero.Fs) {
+				createTestDir(t, fs, cacheRoot+"/ubuntu")
+			},
+			fsCheckFunc: func(t *testing.T, fs afero.Fs) {
+				exists, err := afero.Exists(fs, cacheRoot+"/ubuntu")
+				assert.NoError(t, err)
+				assert.False(t, exists, "dir still exists")
+			},
+			wantErr: nil,
+		},
+		{
+			name: "recursive deletion 1",
+			fsModFunc: func(t *testing.T, fs afero.Fs) {
+				createTestDir(t, fs, cacheRoot+"/ubuntu/20.10/20201027")
+			},
+			fsCheckFunc: func(t *testing.T, fs afero.Fs) {
+				exists, err := afero.Exists(fs, cacheRoot+"/ubuntu/20.10/20201027")
+				assert.NoError(t, err)
+				assert.False(t, exists, "dir still exists")
+
+				exists, err = afero.Exists(fs, cacheRoot+"/ubuntu/20.10")
+				assert.NoError(t, err)
+				assert.False(t, exists, "dir still exists")
+
+				exists, err = afero.Exists(fs, cacheRoot+"/ubuntu")
+				assert.NoError(t, err)
+				assert.False(t, exists, "dir still exists")
+			},
+			wantErr: nil,
+		},
+		{
+			name: "recursive deletion 2",
+			fsModFunc: func(t *testing.T, fs afero.Fs) {
+				createTestFile(t, fs, cacheRoot+"/ubuntu/20.04/20201028/img.tar.lz4")
+				createTestDir(t, fs, cacheRoot+"/ubuntu/20.10/20201027")
+			},
+			fsCheckFunc: func(t *testing.T, fs afero.Fs) {
+				exists, err := afero.Exists(fs, cacheRoot+"/ubuntu/20.10/20201027")
+				assert.NoError(t, err)
+				assert.False(t, exists, "dir still exists")
+
+				exists, err = afero.Exists(fs, cacheRoot+"/ubuntu/20.10")
+				assert.NoError(t, err)
+				assert.False(t, exists, "dir still exists")
+
+				exists, err = afero.Exists(fs, cacheRoot+"/ubuntu")
+				assert.NoError(t, err)
+				assert.True(t, exists, "dir was deleted")
+			},
+			wantErr: nil,
+		},
+		{
+			name: "kind of realistic scenario",
+
+			fsModFunc: func(t *testing.T, fs afero.Fs) {
+				createTestDir(t, fs, cacheRoot+"/boot/metal-hammer/releases/download/v0.8.0")
+				createTestFile(t, fs, cacheRoot+"/boot/metal-hammer/pull-requests/pr-title/metal-hammer-initrd.img.lz4")
+				createTestFile(t, fs, cacheRoot+"/boot/metal-hammer/pull-requests/pr-title/metal-hammer-initrd.img.lz4.md5")
+				createTestFile(t, fs, cacheRoot+"/ubuntu/20.10/20201026/img.tar.lz4")
+				createTestFile(t, fs, cacheRoot+"/ubuntu/20.10/20201026/img.tar.lz4.md5")
+				createTestDir(t, fs, cacheRoot+"/firewall/2.0/20210131")
+				createTestDir(t, fs, cacheRoot+"/firewall/2.0/20210207")
+				createTestFile(t, fs, cacheRoot+"/firewall/2.0/20210304/img.tar.lz4")
+				createTestFile(t, fs, cacheRoot+"/firewall/2.0/20210304/img.tar.lz4.md5")
+			},
+			fsCheckFunc: func(t *testing.T, fs afero.Fs) {
+				for _, subPath := range []string{
+					"/boot/metal-hammer/releases",
+					"/firewall/2.0.20210131",
+					"/firewall/2.0.20210207",
+				} {
+					exists, err := afero.Exists(fs, cacheRoot+subPath)
+					assert.NoError(t, err)
+					assert.False(t, exists, "dir still exists")
+				}
+
+				for _, subPath := range []string{
+					"/boot/metal-hammer/pull-requests/pr-title/metal-hammer-initrd.img.lz4",
+					"/boot/metal-hammer/pull-requests/pr-title/metal-hammer-initrd.img.lz4.md5",
+					"/ubuntu/20.10/20201026/img.tar.lz4",
+					"/ubuntu/20.10/20201026/img.tar.lz4.md5",
+					"/firewall/2.0/20210304/img.tar.lz4",
+					"/firewall/2.0/20210304/img.tar.lz4.md5",
+				} {
+					exists, err := afero.Exists(fs, cacheRoot+subPath)
+					assert.NoError(t, err)
+					assert.True(t, exists, "dir was deleted")
+				}
+			},
+			wantErr: nil,
+		},
+	}
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			fs := afero.NewMemMapFs()
+			require.Nil(t, fs.MkdirAll(cacheRoot, 0755))
+			if tt.fsModFunc != nil {
+				tt.fsModFunc(t, fs)
+			}
+
+			err := cleanEmptyDirs(fs, cacheRoot)
+			if diff := cmp.Diff(err, tt.wantErr); diff != "" {
+				t.Errorf("cleanEmptyDirs() diff = %v", diff)
+			}
+
+			if tt.fsCheckFunc != nil {
+				tt.fsCheckFunc(t, fs)
+			}
+		})
+	}
 }

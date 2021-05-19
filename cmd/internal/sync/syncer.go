@@ -2,6 +2,7 @@ package sync
 
 import (
 	"context"
+
 	// nolint
 	"crypto/md5"
 	"fmt"
@@ -90,6 +91,11 @@ func (s *Syncer) Sync(rootPath string, entitiesToSync api.CacheEntities) error {
 		}
 	}
 
+	err = cleanEmptyDirs(s.fs, rootPath)
+	if err != nil {
+		return errors.Wrap(err, "error cleaning up empty directories")
+	}
+
 	return nil
 }
 
@@ -97,7 +103,7 @@ func currentFileIndex(fs afero.Fs, rootPath string) (api.CacheEntities, error) {
 	var result api.CacheEntities
 	err := afero.Walk(fs, rootPath, func(p string, info os.FileInfo, innerErr error) error {
 		if innerErr != nil {
-			return errors.Wrap(innerErr, "error while walking through cache root")
+			return errors.Wrap(innerErr, fmt.Sprintf("error while walking through root path %s", rootPath))
 		}
 
 		if info.IsDir() {
@@ -307,4 +313,58 @@ func (s *Syncer) printSyncPlan(remove api.CacheEntities, keep []api.CacheEntity,
 		table.Append(v)
 	}
 	table.Render()
+}
+
+func cleanEmptyDirs(fs afero.Fs, rootPath string) error {
+	files, err := afero.ReadDir(fs, rootPath)
+	if err != nil {
+		return err
+	}
+
+	for _, info := range files {
+		if !info.IsDir() {
+			continue
+		}
+
+		err = recurseCleanEmptyDirs(fs, path.Join(rootPath, info.Name()))
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func recurseCleanEmptyDirs(fs afero.Fs, p string) error {
+	files, err := afero.ReadDir(fs, p)
+	if err != nil {
+		return err
+	}
+
+	for _, info := range files {
+		if !info.IsDir() {
+			continue
+		}
+
+		nested := path.Join(p, info.Name())
+		err = recurseCleanEmptyDirs(fs, nested)
+		if err != nil {
+			return err
+		}
+	}
+
+	// re-read files because directories could delete themselves in first loop
+	files, err = afero.ReadDir(fs, p)
+	if err != nil {
+		return err
+	}
+
+	if len(files) == 0 {
+		err = fs.Remove(p)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
 }

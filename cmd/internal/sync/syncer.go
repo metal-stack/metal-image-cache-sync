@@ -2,6 +2,8 @@ package sync
 
 import (
 	"context"
+	"io/ioutil"
+
 	// nolint
 	"crypto/md5"
 	"fmt"
@@ -88,6 +90,11 @@ func (s *Syncer) Sync(rootPath string, entitiesToSync api.CacheEntities) error {
 		if err != nil {
 			return fmt.Errorf("error downloading file, retrying in next sync schedule: %w", err)
 		}
+	}
+
+	err = cleanEmptyDirs(s.fs, rootPath)
+	if err != nil {
+		return errors.Wrap(err, "error cleaning up empty directories")
 	}
 
 	return nil
@@ -307,4 +314,37 @@ func (s *Syncer) printSyncPlan(remove api.CacheEntities, keep []api.CacheEntity,
 		table.Append(v)
 	}
 	table.Render()
+}
+
+func cleanEmptyDirs(fs afero.Fs, rootPath string) error {
+	err := afero.Walk(fs, rootPath, func(path string, info os.FileInfo, innerErr error) error {
+		if innerErr != nil {
+			return errors.Wrap(innerErr, "error while walking through cache root")
+		}
+
+		if !info.IsDir() {
+			return nil
+		}
+
+		files, err := ioutil.ReadDir(path)
+		if err != nil {
+			return err
+		}
+
+		if len(files) != 0 {
+			return nil
+		}
+
+		err = os.Remove(path)
+		if err != nil {
+			return err
+		}
+
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+
+	return nil
 }

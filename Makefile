@@ -3,7 +3,7 @@ MAINMODULE := github.com/metal-stack/metal-image-cache-sync/cmd
 COMMONDIR := $(or ${COMMONDIR},../builder)
 
 # default points to mini-lab
-METAL_API_ENDPOINT := $(or ${METALCTL_URL},http://api.0.0.0.0.xip.io:8080/metal)
+METAL_API_ENDPOINT := $(or ${METALCTL_URL},http://api.0.0.0.0.nip.io:8080/metal)
 METAL_API_HMAC := $(or ${METALCTL_HMAC},metal-view)
 
 include $(COMMONDIR)/Makefile.inc

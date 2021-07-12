@@ -5,10 +5,9 @@ import (
 	"path"
 
 	"github.com/docker/go-units"
-	"github.com/pkg/errors"
+	"github.com/go-playground/validator/v10"
 	"github.com/spf13/afero"
 	"github.com/spf13/viper"
-	"gopkg.in/go-playground/validator.v9"
 )
 
 type Config struct {
@@ -63,7 +62,7 @@ func NewConfig() (*Config, error) {
 	var err error
 	c.MaxCacheSize, err = units.FromHumanSize(viper.GetString("max-cache-size"))
 	if err != nil {
-		return nil, errors.Wrap(err, "cannot read max cache size")
+		return nil, fmt.Errorf("cannot read max cache size:%w", err)
 	}
 
 	return c, nil
@@ -94,7 +93,7 @@ func (c *Config) Validate(fs afero.Fs) error {
 
 	isDir, err := afero.IsDir(fs, c.CacheRootPath)
 	if err != nil {
-		return errors.Wrap(err, "cannot open cache root path")
+		return fmt.Errorf("cannot open cache root path:%w", err)
 	}
 	if !isDir {
 		return fmt.Errorf("cache root path is not a directory")

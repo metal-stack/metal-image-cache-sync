@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"path"
 	"regexp"
@@ -134,7 +134,7 @@ func dlLoggingSvc(data []byte) (*s3.S3, *[]string, *[]string) {
 		bodyBytes := data[start:fin]
 		r.HTTPResponse = &http.Response{
 			StatusCode: 200,
-			Body:       ioutil.NopCloser(bytes.NewReader(bodyBytes)),
+			Body:       io.NopCloser(bytes.NewReader(bodyBytes)),
 			Header:     http.Header{},
 		}
 		r.HTTPResponse.Header.Set("Content-Range", fmt.Sprintf("bytes %d-%d/%d",

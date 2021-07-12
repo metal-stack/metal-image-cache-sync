@@ -15,7 +15,6 @@ import (
 	"github.com/metal-stack/metal-image-cache-sync/cmd/internal/metrics"
 	"github.com/metal-stack/metal-image-cache-sync/pkg/api"
 	"github.com/metal-stack/metal-image-cache-sync/pkg/utils"
-	"github.com/pkg/errors"
 	"go.uber.org/zap"
 )
 
@@ -44,12 +43,12 @@ func NewSyncLister(logger *zap.SugaredLogger, driver *metalgo.Driver, s3 *s3.S3,
 func (s *SyncLister) DetermineImageSyncList() ([]api.OS, error) {
 	s3Images, err := s.retrieveImagesFromS3()
 	if err != nil {
-		return nil, errors.Wrap(err, "error listing images in s3")
+		return nil, fmt.Errorf("error listing images in s3:%w", err)
 	}
 
 	resp, err := s.driver.ImageList()
 	if err != nil {
-		return nil, errors.Wrap(err, "error listing images")
+		return nil, fmt.Errorf("error listing images:%w", err)
 	}
 
 	s.imageCollector.SetMetalAPIImageCount(len(resp.Image))
@@ -170,7 +169,7 @@ func (s *SyncLister) isExcluded(url string) bool {
 func (s *SyncLister) DetermineKernelSyncList() ([]api.Kernel, error) {
 	resp, err := s.driver.PartitionList()
 	if err != nil {
-		return nil, errors.Wrap(err, "error listing partitions")
+		return nil, fmt.Errorf("error listing partitions:%w", err)
 	}
 
 	var result []api.Kernel
@@ -217,7 +216,7 @@ func (s *SyncLister) DetermineKernelSyncList() ([]api.Kernel, error) {
 func (s *SyncLister) DetermineBootImageSyncList() ([]api.BootImage, error) {
 	resp, err := s.driver.PartitionList()
 	if err != nil {
-		return nil, errors.Wrap(err, "error listing partitions")
+		return nil, fmt.Errorf("error listing partitions:%w", err)
 	}
 
 	var result []api.BootImage
@@ -271,7 +270,7 @@ func (s *SyncLister) DetermineBootImageSyncList() ([]api.BootImage, error) {
 func retrieveContentLength(ctx context.Context, c *http.Client, url string) (int64, error) {
 	req, err := http.NewRequest(http.MethodHead, url, nil)
 	if err != nil {
-		return 0, errors.Wrap(err, "unable to create head request")
+		return 0, fmt.Errorf("unable to create head request:%w", err)
 	}
 
 	req = req.WithContext(ctx)
@@ -288,7 +287,7 @@ func retrieveContentLength(ctx context.Context, c *http.Client, url string) (int
 
 	size, err := strconv.Atoi(resp.Header.Get("Content-Length"))
 	if err != nil {
-		return 0, errors.Wrap(err, "content-length header value could not be converted to integer")
+		return 0, fmt.Errorf("content-length header value could not be converted to integer:%w", err)
 	}
 
 	return int64(size), nil
@@ -347,7 +346,7 @@ func (s *SyncLister) retrieveImagesFromS3() (map[string]s3.Object, error) {
 		return true
 	})
 	if err != nil {
-		return nil, errors.Wrap(err, "cannot list s3 objects")
+		return nil, fmt.Errorf("cannot list s3 objects:%w", err)
 	}
 
 	return res, nil

@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
@@ -9,7 +10,6 @@ import (
 	"github.com/Masterminds/semver"
 
 	"github.com/aws/aws-sdk-go/service/s3/s3manager"
-	"github.com/pkg/errors"
 	"github.com/spf13/afero"
 )
 
@@ -49,20 +49,20 @@ func (k Kernel) DownloadMD5(ctx context.Context, target *afero.File, c *http.Cli
 func (k Kernel) Download(ctx context.Context, target afero.File, c *http.Client, s3downloader *s3manager.Downloader) (int64, error) {
 	req, err := http.NewRequest(http.MethodGet, k.URL, nil)
 	if err != nil {
-		return 0, errors.Wrap(err, "unable to create get request")
+		return 0, fmt.Errorf("unable to create get request:%w", err)
 	}
 
 	req = req.WithContext(ctx)
 
 	resp, err := c.Do(req)
 	if err != nil {
-		return 0, errors.Wrap(err, "kernel download error")
+		return 0, fmt.Errorf("kernel download error:%w", err)
 	}
 	defer resp.Body.Close()
 
 	n, err := io.Copy(target, resp.Body)
 	if err != nil {
-		return 0, errors.Wrap(err, "kernel download error")
+		return 0, fmt.Errorf("kernel download error:%w", err)
 	}
 
 	return n, nil

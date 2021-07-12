@@ -4,13 +4,11 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"strings"
 
 	"github.com/Masterminds/semver"
 	"github.com/aws/aws-sdk-go/service/s3/s3manager"
-	"github.com/pkg/errors"
 	"github.com/spf13/afero"
 )
 
@@ -48,34 +46,34 @@ func (b BootImage) DownloadMD5(ctx context.Context, target *afero.File, c *http.
 
 	req, err := http.NewRequest(http.MethodGet, md5URL, nil)
 	if err != nil {
-		return "", errors.Wrap(err, "unable to create get request")
+		return "", fmt.Errorf("unable to create get request:%w", err)
 	}
 
 	req = req.WithContext(ctx)
 
 	resp, err := c.Do(req)
 	if err != nil {
-		return "", errors.Wrap(err, "boot image md5 download error")
+		return "", fmt.Errorf("boot image md5 download error:%w", err)
 	}
 	defer resp.Body.Close()
 
 	if target != nil {
 		_, err = io.Copy(*target, resp.Body)
 		if err != nil {
-			return "", errors.Wrap(err, "boot image md5 download error")
+			return "", fmt.Errorf("boot image md5 download error:%w", err)
 		}
 
 		return "", nil
 	}
 
-	body, err := ioutil.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return "", errors.Wrap(err, "boot image md5 download error")
+		return "", fmt.Errorf("boot image md5 download error:%w", err)
 	}
 
 	parts := strings.Split(string(body), " ")
 	if len(parts) == 0 {
-		return "", fmt.Errorf("md5 sum file has unexpected format")
+		return "", fmt.Errorf("md5 sum file has unexpected format:%w", err)
 	}
 
 	return parts[0], nil
@@ -84,20 +82,20 @@ func (b BootImage) DownloadMD5(ctx context.Context, target *afero.File, c *http.
 func (b BootImage) Download(ctx context.Context, target afero.File, c *http.Client, s3downloader *s3manager.Downloader) (int64, error) {
 	req, err := http.NewRequest(http.MethodGet, b.URL, nil)
 	if err != nil {
-		return 0, errors.Wrap(err, "unable to create get request")
+		return 0, fmt.Errorf("unable to create get request:%w", err)
 	}
 
 	req = req.WithContext(ctx)
 
 	resp, err := c.Do(req)
 	if err != nil {
-		return 0, errors.Wrap(err, "boot image download error")
+		return 0, fmt.Errorf("boot image download error:%w", err)
 	}
 	defer resp.Body.Close()
 
 	n, err := io.Copy(target, resp.Body)
 	if err != nil {
-		return 0, errors.Wrap(err, "boot image download error")
+		return 0, fmt.Errorf("boot image download error:%w", err)
 	}
 
 	return n, nil

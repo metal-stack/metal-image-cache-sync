@@ -17,7 +17,6 @@ import (
 	"github.com/metal-stack/metal-image-cache-sync/cmd/internal/metrics"
 	"github.com/metal-stack/metal-image-cache-sync/pkg/api"
 	"github.com/olekukonko/tablewriter"
-	"github.com/pkg/errors"
 	"github.com/spf13/afero"
 	"go.uber.org/zap"
 )
@@ -36,15 +35,15 @@ type Syncer struct {
 func NewSyncer(logger *zap.SugaredLogger, fs afero.Fs, s3 *s3manager.Downloader, config *api.Config, collector *metrics.ImageCollector, stop context.Context) (*Syncer, error) {
 	err := fs.MkdirAll(config.GetImageRootPath(), 0755)
 	if err != nil {
-		return nil, errors.Wrap(err, "error creating image subdirectory in cache root")
+		return nil, fmt.Errorf("error creating image subdirectory in cache root:%w", err)
 	}
 	err = fs.MkdirAll(config.GetKernelRootPath(), 0755)
 	if err != nil {
-		return nil, errors.Wrap(err, "error creating kernel subdirectory in cache root")
+		return nil, fmt.Errorf("error creating kernel subdirectory in cache root:%w", err)
 	}
 	err = fs.MkdirAll(config.GetBootImageRootPath(), 0755)
 	if err != nil {
-		return nil, errors.Wrap(err, "error creating boot image subdirectory in cache root")
+		return nil, fmt.Errorf("error creating boot image subdirectory in cache root:%w", err)
 	}
 
 	return &Syncer{
@@ -62,12 +61,12 @@ func NewSyncer(logger *zap.SugaredLogger, fs afero.Fs, s3 *s3manager.Downloader,
 func (s *Syncer) Sync(rootPath string, entitiesToSync api.CacheEntities) error {
 	current, err := currentFileIndex(s.fs, rootPath)
 	if err != nil {
-		return errors.Wrap(err, "error creating file index")
+		return fmt.Errorf("error creating file index:%w", err)
 	}
 
 	remove, keep, add, err := s.defineDiff(rootPath, current, entitiesToSync)
 	if err != nil {
-		return errors.Wrap(err, "error creating cache diff")
+		return fmt.Errorf("error creating cache diff:%w", err)
 	}
 
 	s.printSyncPlan(remove, keep, add)
@@ -93,7 +92,7 @@ func (s *Syncer) Sync(rootPath string, entitiesToSync api.CacheEntities) error {
 
 	err = cleanEmptyDirs(s.fs, rootPath)
 	if err != nil {
-		return errors.Wrap(err, "error cleaning up empty directories")
+		return fmt.Errorf("error cleaning up empty directories:%w", err)
 	}
 
 	return nil
@@ -103,7 +102,7 @@ func currentFileIndex(fs afero.Fs, rootPath string) (api.CacheEntities, error) {
 	var result api.CacheEntities
 	err := afero.Walk(fs, rootPath, func(p string, info os.FileInfo, innerErr error) error {
 		if innerErr != nil {
-			return errors.Wrap(innerErr, fmt.Sprintf("error while walking through root path %s", rootPath))
+			return fmt.Errorf("error while walking through root path %s error:%w", rootPath, innerErr)
 		}
 
 		if info.IsDir() {
@@ -158,7 +157,7 @@ func (s *Syncer) defineDiff(rootPath string, currentEntities api.CacheEntities, 
 
 		hash, err := s.fileMD5(strings.Join([]string{rootPath, existing.GetSubPath()}, string(os.PathSeparator)))
 		if err != nil {
-			return nil, nil, nil, errors.Wrap(err, "error calculating hash sum of local file")
+			return nil, nil, nil, fmt.Errorf("error calculating hash sum of local file:%w", err)
 		}
 
 		if hash != expected {
@@ -211,12 +210,12 @@ func (s *Syncer) download(rootPath string, e api.CacheEntity) error {
 
 	err := s.fs.MkdirAll(path.Dir(tmpTargetPath), 0755)
 	if err != nil {
-		return errors.Wrap(err, "error creating tmp download path in cache root")
+		return fmt.Errorf("error creating tmp download path in cache root:%w", err)
 	}
 
 	err = s.fs.MkdirAll(path.Dir(targetPath), 0755)
 	if err != nil {
-		return errors.Wrap(err, "error creating path in cache root")
+		return fmt.Errorf("error creating path in cache root:%w", err)
 	}
 
 	f, err := s.fs.Create(tmpTargetPath)
@@ -247,7 +246,7 @@ func (s *Syncer) download(rootPath string, e api.CacheEntity) error {
 
 	err = s.fs.Rename(tmpTargetPath, targetPath)
 	if err != nil {
-		return errors.Wrap(err, "error moving downloaded file to final destination")
+		return fmt.Errorf("error moving downloaded file to final destination:%w", err)
 	}
 
 	if !e.HasMD5() {

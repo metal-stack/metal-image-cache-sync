@@ -12,7 +12,6 @@ import (
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/aws/aws-sdk-go/service/s3/s3manager"
 	"github.com/metal-stack/metal-go/api/models"
-	"github.com/pkg/errors"
 	"github.com/spf13/afero"
 )
 
@@ -73,7 +72,7 @@ func (o OS) DownloadMD5(ctx context.Context, target *afero.File, c *http.Client,
 			Key:    o.MD5Ref.Key,
 		})
 		if err != nil {
-			return "", errors.Wrap(err, fmt.Sprintf("error downloading checksum of image: %s", o.BucketKey))
+			return "", fmt.Errorf("error downloading checksum of image: %s error:%w", o.BucketKey, err)
 		}
 		return "", nil
 	}
@@ -84,7 +83,7 @@ func (o OS) DownloadMD5(ctx context.Context, target *afero.File, c *http.Client,
 		Key:    o.MD5Ref.Key,
 	})
 	if err != nil {
-		return "", errors.Wrap(err, fmt.Sprintf("error downloading checksum of image: %s", o.BucketKey))
+		return "", fmt.Errorf("error downloading checksum of image: %s error:%w", o.BucketKey, err)
 	}
 
 	parts := strings.Split(string(buff.Bytes()), " ")
@@ -101,7 +100,7 @@ func (o OS) Download(ctx context.Context, target afero.File, c *http.Client, s3d
 		Key:    &o.BucketKey,
 	})
 	if err != nil {
-		return 0, errors.Wrap(err, "image download error")
+		return 0, fmt.Errorf("image download error:%w", err)
 	}
 
 	return n, nil

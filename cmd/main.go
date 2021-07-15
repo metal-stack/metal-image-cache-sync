@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"log"
 	"net/http"
 	"strings"
@@ -20,7 +22,6 @@ import (
 	"github.com/metal-stack/metal-image-cache-sync/pkg/api"
 	"github.com/metal-stack/metal-image-cache-sync/pkg/utils"
 	"github.com/metal-stack/v"
-	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/robfig/cron/v3"
 	"github.com/spf13/afero"
@@ -223,7 +224,7 @@ func run() error {
 		}
 	})
 	if err != nil {
-		return errors.Wrap(err, "could not initialize cron schedule")
+		return fmt.Errorf("could not initialize cron schedule:%w", err)
 	}
 
 	handlers := []cacheFileHandler{newCacheFileHandler(c.ImageCacheBindAddress, c.GetImageRootPath(), imageCollector)}
@@ -330,7 +331,7 @@ func runSync(c *api.Config) error {
 	err := func() error {
 		syncImages, err := lister.DetermineImageSyncList()
 		if err != nil {
-			return errors.Wrap(err, "cannot gather images")
+			return fmt.Errorf("cannot gather images:%w", err)
 		}
 
 		var converted api.CacheEntities
@@ -340,7 +341,7 @@ func runSync(c *api.Config) error {
 
 		err = syncer.Sync(c.GetImageRootPath(), converted)
 		if err != nil {
-			return errors.Wrap(err, "error during image sync")
+			return fmt.Errorf("error during image sync:%w", err)
 		}
 
 		return nil
@@ -352,7 +353,7 @@ func runSync(c *api.Config) error {
 	err = func() error {
 		syncKernels, err := lister.DetermineKernelSyncList()
 		if err != nil {
-			return errors.Wrap(err, "cannot kernel images")
+			return fmt.Errorf("cannot kernel images:%w", err)
 		}
 
 		var converted api.CacheEntities
@@ -362,7 +363,7 @@ func runSync(c *api.Config) error {
 
 		err = syncer.Sync(c.GetKernelRootPath(), converted)
 		if err != nil {
-			return errors.Wrap(err, "error during kernel sync")
+			return fmt.Errorf("error during kernel sync:%w", err)
 		}
 
 		return nil
@@ -374,7 +375,7 @@ func runSync(c *api.Config) error {
 	err = func() error {
 		syncImages, err := lister.DetermineBootImageSyncList()
 		if err != nil {
-			return errors.Wrap(err, "cannot gather boot images")
+			return fmt.Errorf("cannot gather boot images:%w", err)
 		}
 
 		var converted api.CacheEntities
@@ -384,7 +385,7 @@ func runSync(c *api.Config) error {
 
 		err = syncer.Sync(c.GetBootImageRootPath(), converted)
 		if err != nil {
-			return errors.Wrap(err, "error during boot image sync")
+			return fmt.Errorf("error during boot image sync:%w", err)
 		}
 
 		return nil
@@ -394,7 +395,7 @@ func runSync(c *api.Config) error {
 	}
 
 	if len(errs) > 0 {
-		return errors.Errorf("errors occurred during sync: %v", errs)
+		return fmt.Errorf("errors occurred during sync: %v", errs)
 	}
 
 	return nil

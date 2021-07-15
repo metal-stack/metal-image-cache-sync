@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/collectors"
 	"go.uber.org/zap"
 )
 
@@ -44,8 +45,8 @@ func MustKernelMetrics(logger *zap.SugaredLogger, rootPath string) *KernelCollec
 	})
 	c.cacheDownloads = cacheDownloads.Inc
 
-	c.reg.MustRegister(prometheus.NewProcessCollector(prometheus.ProcessCollectorOpts{}))
-	c.reg.MustRegister(prometheus.NewGoCollector())
+	c.reg.MustRegister(collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}))
+	c.reg.MustRegister(collectors.NewGoCollector())
 	c.reg.MustRegister(cacheSize)
 	c.reg.MustRegister(cacheImageCount)
 	c.reg.MustRegister(cacheMisses)

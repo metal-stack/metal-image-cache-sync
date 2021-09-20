@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/Masterminds/semver"
+	"github.com/Masterminds/semver/v3"
 
 	"github.com/aws/aws-sdk-go/service/s3/s3manager"
 	"github.com/spf13/afero"

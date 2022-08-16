@@ -13,9 +13,9 @@ func NewCronLogger(logger *zap.SugaredLogger) *CronLogger {
 }
 
 func (c *CronLogger) Info(msg string, keysAndValues ...interface{}) {
-	c.l.Infow(msg, keysAndValues)
+	c.l.Infow(msg, keysAndValues...)
 }
 
 func (c *CronLogger) Error(err error, msg string, keysAndValues ...interface{}) {
-	c.l.Errorw(msg, keysAndValues)
+	c.l.Errorw(msg, keysAndValues...)
 }

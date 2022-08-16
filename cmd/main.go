@@ -252,8 +252,9 @@ func run() error {
 		router.HandleFunc("/", h.handle)
 
 		srv := http.Server{
-			Addr:    h.bindAddress,
-			Handler: router,
+			Addr:              h.bindAddress,
+			Handler:           router,
+			ReadHeaderTimeout: 1 * time.Minute,
 		}
 
 		srvs = append(srvs, &srv)

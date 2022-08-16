@@ -12,6 +12,8 @@ import (
 
 	"github.com/aws/aws-sdk-go/service/s3"
 	metalgo "github.com/metal-stack/metal-go"
+	"github.com/metal-stack/metal-go/api/client/image"
+	"github.com/metal-stack/metal-go/api/client/partition"
 	"github.com/metal-stack/metal-image-cache-sync/cmd/internal/metrics"
 	"github.com/metal-stack/metal-image-cache-sync/pkg/api"
 	"github.com/metal-stack/metal-image-cache-sync/pkg/utils"
@@ -20,7 +22,7 @@ import (
 
 type SyncLister struct {
 	logger         *zap.SugaredLogger
-	driver         *metalgo.Driver
+	client         metalgo.Client
 	config         *api.Config
 	s3             *s3.S3
 	stop           context.Context
@@ -28,10 +30,10 @@ type SyncLister struct {
 	httpClient     *http.Client
 }
 
-func NewSyncLister(logger *zap.SugaredLogger, driver *metalgo.Driver, s3 *s3.S3, imageCollector *metrics.ImageCollector, config *api.Config, stop context.Context) *SyncLister {
+func NewSyncLister(logger *zap.SugaredLogger, client metalgo.Client, s3 *s3.S3, imageCollector *metrics.ImageCollector, config *api.Config, stop context.Context) *SyncLister {
 	return &SyncLister{
 		logger:         logger,
-		driver:         driver,
+		client:         client,
 		config:         config,
 		s3:             s3,
 		stop:           stop,
@@ -46,17 +48,17 @@ func (s *SyncLister) DetermineImageSyncList() ([]api.OS, error) {
 		return nil, fmt.Errorf("error listing images in s3:%w", err)
 	}
 
-	resp, err := s.driver.ImageList()
+	resp, err := s.client.Image().ListImages(image.NewListImagesParams(), nil)
 	if err != nil {
 		return nil, fmt.Errorf("error listing images:%w", err)
 	}
 
-	s.imageCollector.SetMetalAPIImageCount(len(resp.Image))
+	s.imageCollector.SetMetalAPIImageCount(len(resp.Payload))
 
 	expirationGraceDays := 24 * time.Hour * time.Duration(s.config.ExpirationGraceDays)
 
 	images := api.OSImagesByOS{}
-	for _, img := range resp.Image {
+	for _, img := range resp.Payload {
 		if s.isExcluded(img.URL) {
 			s.logger.Debugw("skipping image with exclude URL", "id", *img.ID)
 			continue
@@ -151,7 +153,7 @@ func (s *SyncLister) DetermineImageSyncList() ([]api.OS, error) {
 		}
 	}
 
-	s.imageCollector.SetUnsyncedImageCount(len(resp.Image) - len(syncImages))
+	s.imageCollector.SetUnsyncedImageCount(len(resp.Payload) - len(syncImages))
 
 	return syncImages, nil
 }
@@ -167,7 +169,7 @@ func (s *SyncLister) isExcluded(url string) bool {
 }
 
 func (s *SyncLister) DetermineKernelSyncList() ([]api.Kernel, error) {
-	resp, err := s.driver.PartitionList()
+	resp, err := s.client.Partition().ListPartitions(partition.NewListPartitionsParams(), nil)
 	if err != nil {
 		return nil, fmt.Errorf("error listing partitions:%w", err)
 	}
@@ -175,7 +177,7 @@ func (s *SyncLister) DetermineKernelSyncList() ([]api.Kernel, error) {
 	var result []api.Kernel
 	urls := map[string]bool{}
 
-	for _, p := range resp.Partition {
+	for _, p := range resp.Payload {
 		if p.Bootconfig == nil {
 			continue
 		}
@@ -214,7 +216,7 @@ func (s *SyncLister) DetermineKernelSyncList() ([]api.Kernel, error) {
 }
 
 func (s *SyncLister) DetermineBootImageSyncList() ([]api.BootImage, error) {
-	resp, err := s.driver.PartitionList()
+	resp, err := s.client.Partition().ListPartitions(partition.NewListPartitionsParams(), nil)
 	if err != nil {
 		return nil, fmt.Errorf("error listing partitions:%w", err)
 	}
@@ -222,7 +224,7 @@ func (s *SyncLister) DetermineBootImageSyncList() ([]api.BootImage, error) {
 	var result []api.BootImage
 	urls := map[string]bool{}
 
-	for _, p := range resp.Partition {
+	for _, p := range resp.Payload {
 		if p.Bootconfig == nil {
 			continue
 		}

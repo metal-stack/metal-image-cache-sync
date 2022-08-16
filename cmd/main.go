@@ -173,7 +173,7 @@ func run() error {
 		return err
 	}
 
-	driver, err := metalgo.NewDriver(c.MetalAPIEndpoint, "", c.MetalAPIHMAC, metalgo.AuthType("Metal-View"))
+	mc, _, err := metalgo.NewDriver(c.MetalAPIEndpoint, "", c.MetalAPIHMAC, metalgo.AuthType("Metal-View"))
 	if err != nil {
 		logger.Errorw("cannot create metal-api client", "error", err)
 		return err
@@ -201,7 +201,7 @@ func run() error {
 	s3Client := s3.New(ss)
 	s3Downloader := s3manager.NewDownloader(ss)
 
-	lister = synclister.NewSyncLister(logger.Named("sync-lister"), driver, s3Client, imageCollector, c, stop)
+	lister = synclister.NewSyncLister(logger.Named("sync-lister"), mc, s3Client, imageCollector, c, stop)
 
 	syncer, err = sync.NewSyncer(logger.Named("syncer"), fs, s3Downloader, c, imageCollector, stop)
 	if err != nil {
@@ -252,8 +252,9 @@ func run() error {
 		router.HandleFunc("/", h.handle)
 
 		srv := http.Server{
-			Addr:    h.bindAddress,
-			Handler: router,
+			Addr:              h.bindAddress,
+			Handler:           router,
+			ReadHeaderTimeout: 1 * time.Minute,
 		}
 
 		srvs = append(srvs, &srv)

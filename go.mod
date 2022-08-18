@@ -4,7 +4,7 @@ go 1.18
 
 require (
 	github.com/Masterminds/semver/v3 v3.1.1
-	github.com/aws/aws-sdk-go v1.44.77
+	github.com/aws/aws-sdk-go v1.44.79
 	github.com/docker/go-units v0.4.0
 	github.com/go-openapi/strfmt v0.21.3
 	github.com/go-playground/validator/v10 v10.11.0

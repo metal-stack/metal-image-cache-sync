@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/Masterminds/semver/v3"
 	"github.com/aws/aws-sdk-go/service/s3/s3manager"
 	"github.com/spf13/afero"
 )
@@ -19,14 +18,7 @@ type BootImage struct {
 }
 
 func (b BootImage) GetName() string {
-	// try to find a semver version somewhere in the path...
-	for _, p := range strings.Split(b.URL, "/") {
-		version, err := semver.NewVersion(strings.TrimPrefix(p, "v"))
-		if err == nil {
-			return version.String()
-		}
-	}
-	return b.URL
+	return semverOrURL(b.URL)
 }
 
 func (b BootImage) GetSubPath() string {
@@ -71,7 +63,7 @@ func (b BootImage) DownloadMD5(ctx context.Context, target *afero.File, c *http.
 		return "", fmt.Errorf("boot image md5 download error:%w", err)
 	}
 
-	parts := strings.Split(string(body), " ")
+	parts := strings.Fields(string(body))
 	if len(parts) == 0 {
 		return "", fmt.Errorf("md5 sum file has unexpected format:%w", err)
 	}

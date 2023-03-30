@@ -173,7 +173,7 @@ func run() error {
 		return err
 	}
 
-	mc, _, err := metalgo.NewDriver(c.MetalAPIEndpoint, "", c.MetalAPIHMAC, metalgo.AuthType("Metal-View"))
+	mc, err := metalgo.NewDriver(c.MetalAPIEndpoint, "", c.MetalAPIHMAC, metalgo.AuthType("Metal-View"))
 	if err != nil {
 		logger.Errorw("cannot create metal-api client", "error", err)
 		return err

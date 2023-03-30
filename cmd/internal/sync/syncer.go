@@ -241,7 +241,7 @@ func (s *Syncer) download(rootPath string, e api.CacheEntity) error {
 	case api.Kernel:
 	case api.LocalFile:
 	default:
-		s.logger.Errorw("unexpected entity type for metrics collection: %v", ent)
+		s.logger.Errorw("unexpected entity type for metrics collection", "entity", ent)
 	}
 
 	err = s.fs.Rename(tmpTargetPath, targetPath)

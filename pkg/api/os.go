@@ -86,7 +86,7 @@ func (o OS) DownloadMD5(ctx context.Context, target *afero.File, c *http.Client,
 		return "", fmt.Errorf("error downloading checksum of image: %s error:%w", o.BucketKey, err)
 	}
 
-	parts := strings.Split(string(buff.Bytes()), " ")
+	parts := strings.Fields(string(buff.Bytes()))
 	if len(parts) == 0 {
 		return "", fmt.Errorf("md5 sum file has unexpected format")
 	}

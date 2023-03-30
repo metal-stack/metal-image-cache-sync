@@ -5,9 +5,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"strings"
-
-	"github.com/Masterminds/semver/v3"
 
 	"github.com/aws/aws-sdk-go/service/s3/s3manager"
 	"github.com/spf13/afero"
@@ -20,14 +17,7 @@ type Kernel struct {
 }
 
 func (k Kernel) GetName() string {
-	// try to find a semver version somewhere in the path...
-	for _, p := range strings.Split(k.URL, "/") {
-		version, err := semver.NewVersion(strings.TrimPrefix(p, "v"))
-		if err == nil {
-			return version.String()
-		}
-	}
-	return k.URL
+	return semverOrURL(k.URL)
 }
 
 func (k Kernel) GetSubPath() string {

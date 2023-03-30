@@ -4,7 +4,9 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"strings"
 
+	"github.com/Masterminds/semver/v3"
 	"github.com/aws/aws-sdk-go/service/s3/s3manager"
 	"github.com/spf13/afero"
 )
@@ -48,4 +50,15 @@ func (l LocalFile) DownloadMD5(ctx context.Context, target *afero.File, c *http.
 
 func (l LocalFile) Download(ctx context.Context, target afero.File, c *http.Client, s3downloader *s3manager.Downloader) (int64, error) {
 	return 0, fmt.Errorf("not implemented on local file")
+}
+
+func semverOrURL(url string) string {
+	// try to find a semver version somewhere in the path...
+	for _, p := range strings.Split(url, "/") {
+		version, err := semver.NewVersion(strings.TrimPrefix(p, "v"))
+		if err == nil {
+			return version.String()
+		}
+	}
+	return url
 }

@@ -78,7 +78,7 @@ func Test_currentFileIndex(t *testing.T) {
 		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			fs := afero.NewMemMapFs()
-			require.Nil(t, fs.MkdirAll(cacheRoot, 0755))
+			require.NoError(t, fs.MkdirAll(cacheRoot, 0755))
 			if tt.fsModFunc != nil {
 				tt.fsModFunc(t, fs)
 			}
@@ -97,14 +97,14 @@ func Test_currentFileIndex(t *testing.T) {
 func createTestFile(t *testing.T, fs afero.Fs, p string) {
 	createTestDir(t, fs, path.Base(p))
 	f, err := fs.Create(p)
-	require.Nil(t, err)
+	require.NoError(t, err)
 	defer f.Close()
 	_, err = f.WriteString("Test")
-	require.Nil(t, err)
+	require.NoError(t, err)
 }
 
 func createTestDir(t *testing.T, fs afero.Fs, p string) {
-	require.Nil(t, fs.MkdirAll(p, 0755))
+	require.NoError(t, fs.MkdirAll(p, 0755))
 }
 
 func dlLoggingSvc(data []byte) (*s3.S3, *[]string, *[]string) {
@@ -311,7 +311,7 @@ func TestSyncer_defineImageDiff(t *testing.T) {
 		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			fs := afero.NewMemMapFs()
-			require.Nil(t, fs.MkdirAll(cacheRoot, 0755))
+			require.NoError(t, fs.MkdirAll(cacheRoot, 0755))
 			if tt.fsModFunc != nil {
 				tt.fsModFunc(t, fs)
 			}
@@ -371,7 +371,7 @@ func Test_cleanEmptyDirs(t *testing.T) {
 			},
 			fsCheckFunc: func(t *testing.T, fs afero.Fs) {
 				exists, err := afero.Exists(fs, cacheRoot+"/ubuntu")
-				assert.NoError(t, err)
+				require.NoError(t, err)
 				assert.False(t, exists, "dir still exists")
 			},
 			wantErr: nil,
@@ -383,15 +383,15 @@ func Test_cleanEmptyDirs(t *testing.T) {
 			},
 			fsCheckFunc: func(t *testing.T, fs afero.Fs) {
 				exists, err := afero.Exists(fs, cacheRoot+"/ubuntu/20.10/20201027")
-				assert.NoError(t, err)
+				require.NoError(t, err)
 				assert.False(t, exists, "dir still exists")
 
 				exists, err = afero.Exists(fs, cacheRoot+"/ubuntu/20.10")
-				assert.NoError(t, err)
+				require.NoError(t, err)
 				assert.False(t, exists, "dir still exists")
 
 				exists, err = afero.Exists(fs, cacheRoot+"/ubuntu")
-				assert.NoError(t, err)
+				require.NoError(t, err)
 				assert.False(t, exists, "dir still exists")
 			},
 			wantErr: nil,
@@ -404,15 +404,15 @@ func Test_cleanEmptyDirs(t *testing.T) {
 			},
 			fsCheckFunc: func(t *testing.T, fs afero.Fs) {
 				exists, err := afero.Exists(fs, cacheRoot+"/ubuntu/20.10/20201027")
-				assert.NoError(t, err)
+				require.NoError(t, err)
 				assert.False(t, exists, "dir still exists")
 
 				exists, err = afero.Exists(fs, cacheRoot+"/ubuntu/20.10")
-				assert.NoError(t, err)
+				require.NoError(t, err)
 				assert.False(t, exists, "dir still exists")
 
 				exists, err = afero.Exists(fs, cacheRoot+"/ubuntu")
-				assert.NoError(t, err)
+				require.NoError(t, err)
 				assert.True(t, exists, "dir was deleted")
 			},
 			wantErr: nil,
@@ -438,7 +438,7 @@ func Test_cleanEmptyDirs(t *testing.T) {
 					"/firewall/2.0.20210207",
 				} {
 					exists, err := afero.Exists(fs, cacheRoot+subPath)
-					assert.NoError(t, err)
+					require.NoError(t, err)
 					assert.False(t, exists, "dir still exists")
 				}
 
@@ -451,7 +451,7 @@ func Test_cleanEmptyDirs(t *testing.T) {
 					"/firewall/2.0/20210304/img.tar.lz4.md5",
 				} {
 					exists, err := afero.Exists(fs, cacheRoot+subPath)
-					assert.NoError(t, err)
+					require.NoError(t, err)
 					assert.True(t, exists, "dir was deleted")
 				}
 			},
@@ -462,7 +462,7 @@ func Test_cleanEmptyDirs(t *testing.T) {
 		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			fs := afero.NewMemMapFs()
-			require.Nil(t, fs.MkdirAll(cacheRoot, 0755))
+			require.NoError(t, fs.MkdirAll(cacheRoot, 0755))
 			if tt.fsModFunc != nil {
 				tt.fsModFunc(t, fs)
 			}

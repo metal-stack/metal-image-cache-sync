@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"path"
 	"regexp"
@@ -24,7 +25,6 @@ import (
 	"github.com/spf13/afero"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"go.uber.org/zap/zaptest"
 )
 
 const (
@@ -324,7 +324,7 @@ func TestSyncer_defineImageDiff(t *testing.T) {
 			s3Client, _, _ := dlLoggingSvc([]byte(remoteChecksumFile))
 			d := s3manager.NewDownloaderWithClient(s3Client)
 			s := &Syncer{
-				logger: zaptest.NewLogger(t).Sugar(),
+				logger: slog.Default(),
 				fs:     fs,
 				s3:     d,
 				stop:   context.TODO(),

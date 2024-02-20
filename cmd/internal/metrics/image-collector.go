@@ -1,13 +1,14 @@
 package metrics
 
 import (
+	"log/slog"
+
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/collectors"
-	"go.uber.org/zap"
 )
 
 type ImageCollector struct {
-	logger                    *zap.SugaredLogger
+	logger                    *slog.Logger
 	reg                       *prometheus.Registry
 	rootPath                  string
 	cacheMissInc              func()
@@ -18,7 +19,7 @@ type ImageCollector struct {
 	metalAPIImageCount        func(float64)
 }
 
-func MustImageMetrics(logger *zap.SugaredLogger, rootPath string) *ImageCollector {
+func MustImageMetrics(logger *slog.Logger, rootPath string) *ImageCollector {
 	c := &ImageCollector{
 		logger:   logger,
 		rootPath: rootPath,
@@ -89,7 +90,7 @@ func (c *ImageCollector) cacheDirSize() float64 {
 	size, err := dirSize(c.rootPath)
 
 	if err != nil {
-		c.logger.Errorw("error collecting cache dir size metric", "error", err)
+		c.logger.Error("error collecting cache dir size metric", "error", err)
 	}
 
 	return float64(size)
@@ -99,7 +100,7 @@ func (c *ImageCollector) cacheImageCount() float64 {
 	count, err := fileCount(c.rootPath)
 
 	if err != nil {
-		c.logger.Errorw("error collecting image cache count metric", "error", err)
+		c.logger.Error("error collecting image cache count metric", "error", err)
 	}
 
 	return float64(count)

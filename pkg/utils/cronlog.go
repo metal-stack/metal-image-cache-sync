@@ -1,21 +1,21 @@
 package utils
 
-import "go.uber.org/zap"
+import "log/slog"
 
 type CronLogger struct {
-	l *zap.SugaredLogger
+	l *slog.Logger
 }
 
-func NewCronLogger(logger *zap.SugaredLogger) *CronLogger {
+func NewCronLogger(logger *slog.Logger) *CronLogger {
 	return &CronLogger{
 		l: logger,
 	}
 }
 
 func (c *CronLogger) Info(msg string, keysAndValues ...interface{}) {
-	c.l.Infow(msg, keysAndValues...)
+	c.l.Info(msg, keysAndValues...)
 }
 
 func (c *CronLogger) Error(err error, msg string, keysAndValues ...interface{}) {
-	c.l.Errorw(msg, keysAndValues...)
+	c.l.Error(msg, keysAndValues...)
 }

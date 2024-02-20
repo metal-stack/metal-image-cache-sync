@@ -18,7 +18,6 @@ require (
 	github.com/spf13/cobra v1.8.0
 	github.com/spf13/viper v1.18.2
 	github.com/stretchr/testify v1.8.4
-	go.uber.org/zap v1.26.0
 	sigs.k8s.io/controller-runtime v0.17.2
 )
 

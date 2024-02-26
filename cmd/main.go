@@ -170,9 +170,9 @@ func run() error {
 		return err
 	}
 
-	imageCollector := metrics.MustImageMetrics(logger, c.GetImageRootPath())
-	kernelCollector := metrics.MustKernelMetrics(logger, c.GetKernelRootPath())
-	bootImageCollector := metrics.MustBootImageMetrics(logger, c.GetBootImageRootPath())
+	imageCollector := metrics.MustImageMetrics(logger.WithGroup("metrics"), c.GetImageRootPath())
+	kernelCollector := metrics.MustKernelMetrics(logger.WithGroup("metrics"), c.GetKernelRootPath())
+	bootImageCollector := metrics.MustBootImageMetrics(logger.WithGroup("metrics"), c.GetBootImageRootPath())
 
 	dummyRegion := "dummy" // we don't use AWS S3, we don't need a proper region
 	ss, err := session.NewSession(&aws.Config{

@@ -5,7 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"log/slog"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -27,7 +29,6 @@ import (
 	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
-	"go.uber.org/zap"
 	"sigs.k8s.io/controller-runtime/pkg/manager/signals"
 )
 
@@ -40,7 +41,7 @@ var (
 	cfgFile string
 	lister  *synclister.SyncLister
 	syncer  *sync.Syncer
-	logger  *zap.SugaredLogger
+	logger  *slog.Logger
 	stop    context.Context
 )
 
@@ -63,11 +64,7 @@ var rootCmd = &cobra.Command{
 
 func main() {
 	if err := rootCmd.Execute(); err != nil {
-		if logger != nil {
-			logger.Fatalw("failed executing root command", "error", err)
-		} else {
-			log.Fatal(err)
-		}
+		log.Fatal(err)
 	}
 }
 
@@ -108,24 +105,18 @@ func init() {
 }
 
 func initLogging() {
-	level := zap.InfoLevel
-
+	level := slog.LevelInfo
 	if viper.IsSet("log-level") {
-		err := level.UnmarshalText([]byte(viper.GetString("log-level")))
+		levelVar := slog.LevelVar{}
+		err := levelVar.UnmarshalText([]byte(viper.GetString("log-level")))
 		if err != nil {
-			log.Fatalf("can't initialize zap logger: %v", err)
+			log.Fatalf("can't initialize logger: %v", err)
 		}
+		level = levelVar.Level()
 	}
 
-	cfg := zap.NewProductionConfig()
-	cfg.Level = zap.NewAtomicLevelAt(level)
-
-	l, err := cfg.Build()
-	if err != nil {
-		log.Fatalf("can't initialize zap logger: %v", err)
-	}
-
-	logger = l.Sugar()
+	jsonHandler := slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: level})
+	logger = slog.New(jsonHandler)
 }
 
 func initConfig() {
@@ -163,25 +154,25 @@ func run() error {
 
 	c, err := api.NewConfig()
 	if err != nil {
-		logger.Errorw("error reading config", "error", err)
+		logger.Error("error reading config", "error", err)
 		return err
 	}
 
 	err = c.Validate(fs)
 	if err != nil {
-		logger.Errorw("error validating config", "error", err)
+		logger.Error("error validating config", "error", err)
 		return err
 	}
 
 	mc, err := metalgo.NewDriver(c.MetalAPIEndpoint, "", c.MetalAPIHMAC, metalgo.AuthType("Metal-View"))
 	if err != nil {
-		logger.Errorw("cannot create metal-api client", "error", err)
+		logger.Error("cannot create metal-api client", "error", err)
 		return err
 	}
 
-	imageCollector := metrics.MustImageMetrics(logger.Named("metrics"), c.GetImageRootPath())
-	kernelCollector := metrics.MustKernelMetrics(logger.Named("metrics"), c.GetKernelRootPath())
-	bootImageCollector := metrics.MustBootImageMetrics(logger.Named("metrics"), c.GetBootImageRootPath())
+	imageCollector := metrics.MustImageMetrics(logger.WithGroup("metrics"), c.GetImageRootPath())
+	kernelCollector := metrics.MustKernelMetrics(logger.WithGroup("metrics"), c.GetKernelRootPath())
+	bootImageCollector := metrics.MustBootImageMetrics(logger.WithGroup("metrics"), c.GetBootImageRootPath())
 
 	dummyRegion := "dummy" // we don't use AWS S3, we don't need a proper region
 	ss, err := session.NewSession(&aws.Config{
@@ -194,33 +185,33 @@ func run() error {
 		},
 	})
 	if err != nil {
-		logger.Errorw("cannot create s3 client", "error", err)
+		logger.Error("cannot create s3 client", "error", err)
 		return err
 	}
 
 	s3Client := s3.New(ss)
 	s3Downloader := s3manager.NewDownloader(ss)
 
-	lister = synclister.NewSyncLister(logger.Named("sync-lister"), mc, s3Client, imageCollector, c, stop)
+	lister = synclister.NewSyncLister(logger.WithGroup("sync-lister"), mc, s3Client, imageCollector, c, stop)
 
-	syncer, err = sync.NewSyncer(logger.Named("syncer"), fs, s3Downloader, c, imageCollector, stop)
+	syncer, err = sync.NewSyncer(logger.WithGroup("syncer"), fs, s3Downloader, c, imageCollector, stop)
 	if err != nil {
-		logger.Errorw("cannot create syncer", "error", err)
+		logger.Error("cannot create syncer", "error", err)
 		return err
 	}
 
 	cronjob := cron.New(cron.WithChain(
-		cron.SkipIfStillRunning(utils.NewCronLogger(logger.Named("cron"))),
+		cron.SkipIfStillRunning(utils.NewCronLogger(logger.WithGroup("cron"))),
 	))
 
 	id, err := cronjob.AddFunc(c.SyncSchedule, func() {
 		err := runSync(c)
 		if err != nil {
-			logger.Errorw("error during sync", "error", err)
+			logger.Error("error during sync", "error", err)
 		}
 
 		for _, e := range cronjob.Entries() {
-			logger.Infow("scheduling next sync", "at", e.Next.String())
+			logger.Info("scheduling next sync", "at", e.Next.String())
 		}
 	})
 	if err != nil {
@@ -235,7 +226,7 @@ func run() error {
 		handlers = append(handlers, newCacheFileHandler(c.BootImageCacheBindAddress, c.GetBootImageRootPath(), bootImageCollector))
 	}
 
-	logger.Infow("start metal stack image sync", "version", v.V.String())
+	logger.Info("start metal stack image sync", "version", v.V.String())
 
 	var srvs []*http.Server
 	for _, h := range handlers {
@@ -246,7 +237,7 @@ func run() error {
 		router.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 			_, err := w.Write([]byte("HEALTHY"))
 			if err != nil {
-				logger.Errorw("health endpoint could not write response body", "error", err)
+				logger.Error("health endpoint could not write response body", "error", err)
 			}
 		})
 		router.HandleFunc("/", h.handle)
@@ -260,11 +251,11 @@ func run() error {
 		srvs = append(srvs, &srv)
 
 		go func() {
-			logger.Infow("starting to serve files", "bind-address", h.bindAddress, "directory", h.serveDir)
+			logger.Info("starting to serve files", "bind-address", h.bindAddress, "directory", h.serveDir)
 			err := srv.ListenAndServe()
 			if err != nil {
 				if errors.Is(err, http.ErrServerClosed) {
-					logger.Fatalw("error starting http server, shutting down...", "error", err)
+					log.Fatalf("error starting http server, shutting down... %v", err)
 				}
 			}
 		}()
@@ -273,10 +264,10 @@ func run() error {
 
 	err = runSync(c)
 	if err != nil {
-		logger.Errorw("error during initial sync", "error", err)
+		logger.Error("error during initial sync", "error", err)
 	}
 	cronjob.Start()
-	logger.Infow("scheduling next sync", "at", cronjob.Entry(id).Next.String())
+	logger.Info("scheduling next sync", "at", cronjob.Entry(id).Next.String())
 
 	<-stop.Done()
 	logger.Info("received stop signal, shutting down...")
@@ -285,7 +276,7 @@ func run() error {
 	for _, srv := range srvs {
 		err = srv.Close()
 		if err != nil {
-			logger.Errorw("error shutting down http server", "error", err)
+			logger.Error("error shutting down http server", "error", err)
 		}
 	}
 
@@ -310,19 +301,19 @@ func newCacheFileHandler(bindAddr, serveDir string, collector metrics.DownloadCo
 }
 
 func (c *cacheFileHandler) handle(w http.ResponseWriter, r *http.Request) {
-	logger.Infow("serving cache download request", "url", r.URL.String(), "from", r.RemoteAddr)
+	logger.Info("serving cache download request", "url", r.URL.String(), "from", r.RemoteAddr)
 	hw := utils.NewHTTPRedirectResponseWriter(w, r)
 	c.serveHandler.ServeHTTP(hw, r)
 	switch code := hw.GetStatus(); code {
 	case http.StatusTemporaryRedirect:
-		logger.Infow("cache miss", "url", r.URL.String())
+		logger.Info("cache miss", "url", r.URL.String())
 		c.collector.IncrementCacheMiss()
 	case http.StatusOK:
 		c.collector.IncrementDownloads()
 	case 0:
 		// occurs when just visting directories through browser, swallow
 	default:
-		logger.Infow("responded with error code for download", "url", r.URL.String(), "code", code)
+		logger.Info("responded with error code for download", "url", r.URL.String(), "code", code)
 	}
 }
 

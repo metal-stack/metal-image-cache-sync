@@ -3,6 +3,7 @@ package synclister
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"sort"
@@ -17,11 +18,10 @@ import (
 	"github.com/metal-stack/metal-image-cache-sync/cmd/internal/metrics"
 	"github.com/metal-stack/metal-image-cache-sync/pkg/api"
 	"github.com/metal-stack/metal-image-cache-sync/pkg/utils"
-	"go.uber.org/zap"
 )
 
 type SyncLister struct {
-	logger         *zap.SugaredLogger
+	logger         *slog.Logger
 	client         metalgo.Client
 	config         *api.Config
 	s3             *s3.S3
@@ -30,7 +30,7 @@ type SyncLister struct {
 	httpClient     *http.Client
 }
 
-func NewSyncLister(logger *zap.SugaredLogger, client metalgo.Client, s3 *s3.S3, imageCollector *metrics.ImageCollector, config *api.Config, stop context.Context) *SyncLister {
+func NewSyncLister(logger *slog.Logger, client metalgo.Client, s3 *s3.S3, imageCollector *metrics.ImageCollector, config *api.Config, stop context.Context) *SyncLister {
 	return &SyncLister{
 		logger:         logger,
 		client:         client,
@@ -60,20 +60,20 @@ func (s *SyncLister) DetermineImageSyncList() ([]api.OS, error) {
 	images := api.OSImagesByOS{}
 	for _, img := range resp.Payload {
 		if s.isExcluded(img.URL) {
-			s.logger.Debugw("skipping image with exclude URL", "id", *img.ID)
+			s.logger.Debug("skipping image with exclude URL", "id", *img.ID)
 			continue
 		}
 
 		if img.ExpirationDate != nil {
 			if time.Since(time.Time(*img.ExpirationDate)) > expirationGraceDays {
-				s.logger.Debugw("not considering expired image, skipping", "id", *img.ID)
+				s.logger.Debug("not considering expired image, skipping", "id", *img.ID)
 				continue
 			}
 		}
 
 		os, ver, err := utils.GetOsAndSemver(*img.ID)
 		if err != nil {
-			s.logger.Errorw("could not extract os and version, skipping", "error", err)
+			s.logger.Error("could not extract os and version, skipping", "error", err)
 			continue
 		}
 
@@ -87,7 +87,7 @@ func (s *SyncLister) DetermineImageSyncList() ([]api.OS, error) {
 
 		u, err := url.Parse(img.URL)
 		if err != nil {
-			s.logger.Errorw("image url is invalid, skipping", "error", err)
+			s.logger.Error("image url is invalid, skipping", "error", err)
 			continue
 		}
 
@@ -95,13 +95,13 @@ func (s *SyncLister) DetermineImageSyncList() ([]api.OS, error) {
 
 		s3Image, ok := s3Images[bucketKey]
 		if !ok {
-			s.logger.Errorw("image is not contained in global image store, skipping", "path", u.Path, "id", *img.ID)
+			s.logger.Error("image is not contained in global image store, skipping", "path", u.Path, "id", *img.ID)
 			continue
 		}
 
 		s3MD5, ok := s3Images[bucketKey+".md5"]
 		if !ok {
-			s.logger.Errorw("image md5 is not contained in global image store, skipping", "path", u.Path, "id", *img.ID)
+			s.logger.Error("image md5 is not contained in global image store, skipping", "path", u.Path, "id", *img.ID)
 			continue
 		}
 
@@ -189,19 +189,19 @@ func (s *SyncLister) DetermineKernelSyncList() ([]api.Kernel, error) {
 		}
 
 		if s.isExcluded(kernelURL) {
-			s.logger.Debugw("skipping kernel with exclude URL", "url", kernelURL)
+			s.logger.Debug("skipping kernel with exclude URL", "url", kernelURL)
 			continue
 		}
 
 		u, err := url.Parse(kernelURL)
 		if err != nil {
-			s.logger.Errorw("kernel url is invalid, skipping", "error", err)
+			s.logger.Error("kernel url is invalid, skipping", "error", err)
 			continue
 		}
 
 		size, err := retrieveContentLength(s.stop, s.httpClient, u.String())
 		if err != nil {
-			s.logger.Warnw("unable to determine kernel download size", "error", err)
+			s.logger.Warn("unable to determine kernel download size", "error", err)
 		}
 
 		result = append(result, api.Kernel{
@@ -236,25 +236,25 @@ func (s *SyncLister) DetermineBootImageSyncList() ([]api.BootImage, error) {
 		}
 
 		if s.isExcluded(bootImageURL) {
-			s.logger.Debugw("skipping boot image with exclude URL", "url", bootImageURL)
+			s.logger.Debug("skipping boot image with exclude URL", "url", bootImageURL)
 			continue
 		}
 
 		u, err := url.Parse(bootImageURL)
 		if err != nil {
-			s.logger.Errorw("boot image url is invalid, skipping", "error", err)
+			s.logger.Error("boot image url is invalid, skipping", "error", err)
 			continue
 		}
 
 		size, err := retrieveContentLength(s.stop, s.httpClient, u.String())
 		if err != nil {
-			s.logger.Warnw("unable to determine boot image download size", "error", err)
+			s.logger.Warn("unable to determine boot image download size", "error", err)
 		}
 
 		md5URL := u.String() + ".md5"
 		_, err = retrieveContentLength(s.stop, s.httpClient, md5URL)
 		if err != nil {
-			s.logger.Errorw("boot image md5 does not exist, skipping", "url", md5URL, "error", err)
+			s.logger.Error("boot image md5 does not exist, skipping", "url", md5URL, "error", err)
 			continue
 		}
 

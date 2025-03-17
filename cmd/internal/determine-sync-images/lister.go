@@ -55,7 +55,7 @@ func (s *SyncLister) DetermineImageSyncList() ([]api.OS, error) {
 
 	s.imageCollector.SetMetalAPIImageCount(len(resp.Payload))
 
-	expirationGraceDays := 24 * time.Hour * time.Duration(s.config.ExpirationGraceDays)
+	expirationGraceDays := 24 * time.Hour * time.Duration(s.config.ExpirationGraceDays) // nolint:gosec
 
 	images := api.OSImagesByOS{}
 	for _, img := range resp.Payload {
@@ -292,7 +292,7 @@ func retrieveContentLength(ctx context.Context, c *http.Client, url string) (int
 		return 0, fmt.Errorf("content-length header value could not be converted to integer:%w", err)
 	}
 
-	return int64(size), nil
+	return int64(size), nil // nolint:gosec
 }
 
 func (s *SyncLister) reduce(images []api.OS, sizeCount int64) ([]api.OS, int64, error) {

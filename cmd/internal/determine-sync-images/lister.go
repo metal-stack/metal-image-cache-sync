@@ -73,7 +73,7 @@ func (s *SyncLister) DetermineImageSyncList() ([]api.OS, error) {
 
 		os, ver, err := utils.GetOsAndSemver(*img.ID)
 		if err != nil {
-			s.logger.Error("could not extract os and version, skipping", "error", err)
+			s.logger.Error("could not extract os and version, skipping", "image", img.ID, "error", err)
 			continue
 		}
 

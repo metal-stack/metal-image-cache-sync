@@ -36,7 +36,7 @@ func SortOSImagesByName(imgs []OS) {
 	})
 }
 
-func (o *OS) MajorMinor() (string, error) {
+func (o OS) MajorMinor() (string, error) {
 	if o.Version == nil {
 		return "", fmt.Errorf("image version is nil")
 	}

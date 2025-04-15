@@ -47,7 +47,9 @@ func (b BootImage) DownloadMD5(ctx context.Context, target *afero.File, c *http.
 	if err != nil {
 		return "", fmt.Errorf("boot image md5 download error:%w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 
 	if target != nil {
 		_, err = io.Copy(*target, resp.Body)
@@ -83,8 +85,9 @@ func (b BootImage) Download(ctx context.Context, target afero.File, c *http.Clie
 	if err != nil {
 		return 0, fmt.Errorf("boot image download error:%w", err)
 	}
-	defer resp.Body.Close()
-
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 	n, err := io.Copy(target, resp.Body)
 	if err != nil {
 		return 0, fmt.Errorf("boot image download error:%w", err)

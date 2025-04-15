@@ -98,7 +98,9 @@ func createTestFile(t *testing.T, fs afero.Fs, p string) {
 	createTestDir(t, fs, path.Base(p))
 	f, err := fs.Create(p)
 	require.NoError(t, err)
-	defer f.Close()
+	defer func() {
+		_ = f.Close()
+	}()
 	_, err = f.WriteString("Test")
 	require.NoError(t, err)
 }

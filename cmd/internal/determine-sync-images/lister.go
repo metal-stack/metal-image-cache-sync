@@ -141,11 +141,7 @@ func (s *SyncLister) DetermineImageSyncList() ([]api.OS, error) {
 
 	api.SortOSImagesByName(syncImages)
 
-	for {
-		if sizeCount < s.config.MaxCacheSize {
-			break
-		}
-
+	for sizeCount < s.config.MaxCacheSize {
 		syncImages, sizeCount, err = s.reduce(syncImages, sizeCount)
 		if err != nil {
 			s.logger.Warn("cannot reduce anymore images (all at minimum size), exceeding maximum cache size")
@@ -281,7 +277,9 @@ func retrieveContentLength(ctx context.Context, c *http.Client, url string) (int
 	if err != nil {
 		return 0, err
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 
 	if resp.StatusCode != http.StatusOK {
 		return 0, fmt.Errorf("head request to url did not return OK: %s", url)

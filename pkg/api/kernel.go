@@ -48,7 +48,9 @@ func (k Kernel) Download(ctx context.Context, target afero.File, c *http.Client,
 	if err != nil {
 		return 0, fmt.Errorf("kernel download error:%w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 
 	n, err := io.Copy(target, resp.Body)
 	if err != nil {

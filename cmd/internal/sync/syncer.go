@@ -190,7 +190,10 @@ func (s *Syncer) fileMD5(filePath string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	defer file.Close()
+	defer func() {
+		_ = file.Close()
+	}()
+
 	hash := md5.New() // nolint
 	if _, err := io.Copy(hash, file); err != nil {
 		return "", err
@@ -222,7 +225,6 @@ func (s *Syncer) download(rootPath string, e api.CacheEntity) error {
 	if err != nil {
 		return fmt.Errorf("error opening file path %s: %w", targetPath, err)
 	}
-	defer f.Close()
 
 	s.logger.Info("downloading file", "id", e.GetName(), "key", e.GetSubPath(), "size", e.GetSize(), "to", tmpTargetPath)
 	n, err := e.Download(s.stop, f, s.httpClient, s.s3)
@@ -231,6 +233,7 @@ func (s *Syncer) download(rootPath string, e api.CacheEntity) error {
 	}
 	defer func() {
 		_ = s.fs.Remove(tmpTargetPath)
+		_ = f.Close()
 	}()
 
 	switch ent := e.(type) {
@@ -257,7 +260,9 @@ func (s *Syncer) download(rootPath string, e api.CacheEntity) error {
 	if err != nil {
 		return fmt.Errorf("error opening file path %s: %w", md5TargetPath, err)
 	}
-	defer f.Close()
+	defer func() {
+		_ = f.Close()
+	}()
 
 	s.logger.Info("downloading md5 checksum", "id", e.GetName(), "key", e.GetSubPath(), "to", md5TargetPath)
 	_, err = e.DownloadMD5(s.stop, &f, s.httpClient, s.s3)

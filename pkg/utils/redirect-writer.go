@@ -40,7 +40,7 @@ func (h *HTTPRedirectResponseWriter) WriteHeader(code int) {
 func (h *HTTPRedirectResponseWriter) Write(data []byte) (int, error) {
 	resp := string(data)
 	if strings.Contains(resp, notFoundResp) {
-		mod := strings.Replace(resp, notFoundResp, "307 redirect due to cache miss", -1)
+		mod := strings.ReplaceAll(resp, notFoundResp, "307 redirect due to cache miss")
 		return h.ResponseWriter.Write([]byte(mod))
 	}
 	return h.ResponseWriter.Write(data)

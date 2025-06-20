@@ -18,7 +18,7 @@ import (
 type OS struct {
 	Name       string
 	Version    *semver.Version
-	ApiRef     apiv2.Image
+	ApiRef     *apiv2.Image
 	ImageRef   s3.Object
 	MD5Ref     s3.Object
 	BucketKey  string
@@ -27,7 +27,7 @@ type OS struct {
 type OSImagesByVersion map[string][]OS
 type OSImagesByOS map[string]OSImagesByVersion
 
-func SortOSImagesByName(imgs []OS) {
+func SortOSImagesByName(imgs []*OS) {
 	sort.Slice(imgs, func(i, j int) bool {
 		if imgs[i].Name == imgs[j].Name {
 			return imgs[i].Version.LessThan(imgs[j].Version)
@@ -36,33 +36,33 @@ func SortOSImagesByName(imgs []OS) {
 	})
 }
 
-func (o OS) MajorMinor() (string, error) {
+func (o *OS) MajorMinor() (string, error) {
 	if o.Version == nil {
 		return "", fmt.Errorf("image version is nil")
 	}
 	return fmt.Sprintf("%d.%d", o.Version.Major(), o.Version.Minor()), nil
 }
 
-func (o OS) GetName() string {
+func (o *OS) GetName() string {
 	return o.ApiRef.Id
 }
 
-func (o OS) GetSubPath() string {
+func (o *OS) GetSubPath() string {
 	return o.BucketKey
 }
 
-func (o OS) GetSize() int64 {
+func (o *OS) GetSize() int64 {
 	if o.ImageRef.Size == nil {
 		return 0
 	}
 	return *o.ImageRef.Size
 }
 
-func (o OS) HasMD5() bool {
+func (o *OS) HasMD5() bool {
 	return true
 }
 
-func (o OS) DownloadMD5(ctx context.Context, target *afero.File, c *http.Client, s3downloader *s3manager.Downloader) (string, error) {
+func (o *OS) DownloadMD5(ctx context.Context, target *afero.File, c *http.Client, s3downloader *s3manager.Downloader) (string, error) {
 	if target != nil {
 		_, err := s3downloader.DownloadWithContext(ctx, *target, &s3.GetObjectInput{
 			Bucket: &o.BucketName,
@@ -91,7 +91,7 @@ func (o OS) DownloadMD5(ctx context.Context, target *afero.File, c *http.Client,
 	return parts[0], nil
 }
 
-func (o OS) Download(ctx context.Context, target afero.File, c *http.Client, s3downloader *s3manager.Downloader) (int64, error) {
+func (o *OS) Download(ctx context.Context, target afero.File, c *http.Client, s3downloader *s3manager.Downloader) (int64, error) {
 	n, err := s3downloader.DownloadWithContext(ctx, target, &s3.GetObjectInput{
 		Bucket: &o.BucketName,
 		Key:    &o.BucketKey,

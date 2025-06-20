@@ -237,7 +237,7 @@ func (s *Syncer) download(rootPath string, e api.CacheEntity) error {
 	}()
 
 	switch ent := e.(type) {
-	case api.OS:
+	case *api.OS:
 		s.imageCollector.AddSyncDownloadImageBytes(n)
 		s.imageCollector.IncrementSyncDownloadImageCount()
 	case api.BootImage:

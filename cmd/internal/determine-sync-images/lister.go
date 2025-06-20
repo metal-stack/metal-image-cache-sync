@@ -43,7 +43,7 @@ func NewSyncLister(logger *slog.Logger, client apiclient.Client, s3 *s3.S3, imag
 	}
 }
 
-func (s *SyncLister) DetermineImageSyncList() ([]api.OS, error) {
+func (s *SyncLister) DetermineImageSyncList() ([]*api.OS, error) {
 	s3Images, err := s.retrieveImagesFromS3()
 	if err != nil {
 		return nil, fmt.Errorf("error listing images in s3:%w", err)
@@ -109,7 +109,7 @@ func (s *SyncLister) DetermineImageSyncList() ([]api.OS, error) {
 		imageVersions = append(imageVersions, api.OS{
 			Name:       os,
 			Version:    ver,
-			ApiRef:     *img,
+			ApiRef:     img,
 			BucketKey:  bucketKey,
 			BucketName: s.config.ImageBucket,
 			ImageRef:   s3Image,
@@ -121,7 +121,7 @@ func (s *SyncLister) DetermineImageSyncList() ([]api.OS, error) {
 	}
 
 	var sizeCount int64
-	var syncImages []api.OS
+	var syncImages []*api.OS
 	for _, versions := range images {
 		for _, versionedImages := range versions {
 			versionedImages := versionedImages
@@ -135,7 +135,7 @@ func (s *SyncLister) DetermineImageSyncList() ([]api.OS, error) {
 				}
 				amount += 1
 				sizeCount += *img.ImageRef.Size
-				syncImages = append(syncImages, img)
+				syncImages = append(syncImages, &img)
 			}
 		}
 	}
@@ -294,8 +294,8 @@ func retrieveContentLength(ctx context.Context, c *http.Client, url string) (int
 	return int64(size), nil // nolint:gosec
 }
 
-func (s *SyncLister) reduce(images []api.OS, sizeCount int64) ([]api.OS, int64, error) {
-	groups := map[string][]api.OS{}
+func (s *SyncLister) reduce(images []*api.OS, sizeCount int64) ([]*api.OS, int64, error) {
+	groups := map[string][]*api.OS{}
 	for _, img := range images {
 		key := fmt.Sprintf("%s-%d.%d", img.Name, img.Version.Major(), img.Version.Minor())
 		groups[key] = append(groups[key], img)
@@ -321,11 +321,11 @@ func (s *SyncLister) reduce(images []api.OS, sizeCount int64) ([]api.OS, int64, 
 	}
 
 	groupImages := groups[biggestGroup]
-	groups[biggestGroup] = append([]api.OS{}, groupImages[1:]...)
+	groups[biggestGroup] = append([]*api.OS{}, groupImages[1:]...)
 
 	newSize := sizeCount - *groupImages[0].ImageRef.Size
 
-	var result []api.OS
+	var result []*api.OS
 	for _, imgs := range groups {
 		result = append(result, imgs...)
 	}

@@ -171,12 +171,12 @@ func TestSyncer_defineImageDiff(t *testing.T) {
 		{
 			name: "remove unexisting images",
 			currentImages: api.CacheEntities{
-				api.OS{
+				&api.OS{
 					BucketKey:  "metal-os/master/ubuntu/19.4/20201025/img.tar.lz4",
 					BucketName: "metal-os",
 					Version:    &semver.Version{},
 				},
-				api.OS{
+				&api.OS{
 					BucketKey:  "metal-os/master/ubuntu/19.4/20201026/img.tar.lz4",
 					BucketName: "metal-os",
 					Version:    &semver.Version{},
@@ -185,12 +185,12 @@ func TestSyncer_defineImageDiff(t *testing.T) {
 			wantImages: nil,
 			add:        nil,
 			remove: api.CacheEntities{
-				api.OS{
+				&api.OS{
 					BucketKey:  "metal-os/master/ubuntu/19.4/20201025/img.tar.lz4",
 					BucketName: "metal-os",
 					Version:    &semver.Version{},
 				},
-				api.OS{
+				&api.OS{
 					BucketKey:  "metal-os/master/ubuntu/19.4/20201026/img.tar.lz4",
 					BucketName: "metal-os",
 					Version:    &semver.Version{},
@@ -202,13 +202,13 @@ func TestSyncer_defineImageDiff(t *testing.T) {
 			name:          "add new images",
 			currentImages: nil,
 			wantImages: api.CacheEntities{
-				api.OS{
+				&api.OS{
 					Name:       "ubuntu",
 					Version:    semver.MustParse("19.4"),
 					BucketKey:  "metal-os/master/ubuntu/19.4/20201025/img.tar.lz4",
 					BucketName: "metal-os",
 				},
-				api.OS{
+				&api.OS{
 					Name:       "debian",
 					Version:    semver.MustParse("20.4"),
 					BucketKey:  "metal-os/master/ubuntu/20.4/20201025/img.tar.lz4",
@@ -216,13 +216,13 @@ func TestSyncer_defineImageDiff(t *testing.T) {
 				},
 			},
 			add: api.CacheEntities{
-				api.OS{
+				&api.OS{
 					Name:       "ubuntu",
 					Version:    semver.MustParse("19.4"),
 					BucketKey:  "metal-os/master/ubuntu/19.4/20201025/img.tar.lz4",
 					BucketName: "metal-os",
 				},
-				api.OS{
+				&api.OS{
 					Name:       "debian",
 					Version:    semver.MustParse("20.4"),
 					BucketKey:  "metal-os/master/ubuntu/20.4/20201025/img.tar.lz4",
@@ -235,14 +235,14 @@ func TestSyncer_defineImageDiff(t *testing.T) {
 		{
 			name: "don't download existing images when checksum is proper",
 			currentImages: api.CacheEntities{
-				api.OS{
+				&api.OS{
 					BucketKey:  "metal-os/master/ubuntu/19.4/20201025/img.tar.lz4",
 					BucketName: "metal-os",
 					Version:    &semver.Version{},
 				},
 			},
 			wantImages: api.CacheEntities{
-				api.OS{
+				&api.OS{
 					Name:       "ubuntu",
 					Version:    semver.MustParse("19.4.20201025"),
 					BucketKey:  "metal-os/master/ubuntu/19.4/20201025/img.tar.lz4",
@@ -257,7 +257,7 @@ func TestSyncer_defineImageDiff(t *testing.T) {
 			},
 			add: nil,
 			keep: api.CacheEntities{
-				api.OS{
+				&api.OS{
 					Name:       "ubuntu",
 					Version:    semver.MustParse("19.4.20201025"),
 					BucketKey:  "metal-os/master/ubuntu/19.4/20201025/img.tar.lz4",
@@ -273,14 +273,14 @@ func TestSyncer_defineImageDiff(t *testing.T) {
 		{
 			name: "download existing images when checksum is incorrect",
 			currentImages: api.CacheEntities{
-				api.OS{
+				&api.OS{
 					BucketKey:  "metal-os/master/ubuntu/19.4/20201025/img.tar.lz4",
 					BucketName: "metal-os",
 					Version:    &semver.Version{},
 				},
 			},
 			wantImages: api.CacheEntities{
-				api.OS{
+				&api.OS{
 					Name:       "ubuntu",
 					Version:    semver.MustParse("19.4.20201025"),
 					BucketKey:  "metal-os/master/ubuntu/19.4/20201025/img.tar.lz4",
@@ -295,7 +295,7 @@ func TestSyncer_defineImageDiff(t *testing.T) {
 			},
 			remoteChecksumFile: "not-equal",
 			add: api.CacheEntities{
-				api.OS{
+				&api.OS{
 					Name:       "ubuntu",
 					Version:    semver.MustParse("19.4.20201025"),
 					BucketKey:  "metal-os/master/ubuntu/19.4/20201025/img.tar.lz4",

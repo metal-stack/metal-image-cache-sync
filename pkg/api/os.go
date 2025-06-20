@@ -11,14 +11,14 @@ import (
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/aws/aws-sdk-go/service/s3/s3manager"
-	"github.com/metal-stack/metal-go/api/models"
+	apiv2 "github.com/metal-stack/api/go/metalstack/api/v2"
 	"github.com/spf13/afero"
 )
 
 type OS struct {
 	Name       string
 	Version    *semver.Version
-	ApiRef     models.V1ImageResponse
+	ApiRef     apiv2.Image
 	ImageRef   s3.Object
 	MD5Ref     s3.Object
 	BucketKey  string
@@ -44,10 +44,7 @@ func (o OS) MajorMinor() (string, error) {
 }
 
 func (o OS) GetName() string {
-	if o.ApiRef.ID == nil {
-		return ""
-	}
-	return *o.ApiRef.ID
+	return o.ApiRef.Id
 }
 
 func (o OS) GetSubPath() string {

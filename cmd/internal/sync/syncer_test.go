@@ -18,13 +18,13 @@ import (
 	"github.com/aws/aws-sdk-go/awstesting/unit"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/aws/aws-sdk-go/service/s3/s3manager"
-	"github.com/go-openapi/strfmt"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/metal-stack/metal-image-cache-sync/pkg/api"
 	"github.com/spf13/afero"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/testing/protocmp"
 )
 
 const (
@@ -87,7 +87,7 @@ func Test_currentFileIndex(t *testing.T) {
 				t.Errorf("Syncer.currentImageIndex() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
-			if diff := cmp.Diff(got, tt.want, cmpopts.IgnoreUnexported(strfmt.DateTime{})); diff != "" {
+			if diff := cmp.Diff(got, tt.want, cmpopts.IgnoreUnexported()); diff != "" {
 				t.Errorf("Syncer.currentImageIndex() diff = %v", diff)
 			}
 		})
@@ -337,13 +337,13 @@ func TestSyncer_defineImageDiff(t *testing.T) {
 				t.Errorf("Syncer.defineImageDiff() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
-			if diff := cmp.Diff(gotAdd, tt.add, cmpopts.IgnoreUnexported(strfmt.DateTime{})); diff != "" {
+			if diff := cmp.Diff(gotAdd, tt.add, protocmp.Transform(), cmpopts.IgnoreUnexported()); diff != "" {
 				t.Errorf("Syncer.defineImageDiff() add diff = %v", diff)
 			}
-			if diff := cmp.Diff(gotKeep, tt.keep, cmpopts.IgnoreUnexported(strfmt.DateTime{})); diff != "" {
+			if diff := cmp.Diff(gotKeep, tt.keep, protocmp.Transform(), cmpopts.IgnoreUnexported()); diff != "" {
 				t.Errorf("Syncer.defineImageDiff() keep diff = %v", diff)
 			}
-			if diff := cmp.Diff(gotRemove, tt.remove, cmpopts.IgnoreUnexported(strfmt.DateTime{})); diff != "" {
+			if diff := cmp.Diff(gotRemove, tt.remove, protocmp.Transform()); diff != "" {
 				t.Errorf("Syncer.defineImageDiff() remove diff = %v", diff)
 			}
 		})

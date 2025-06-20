@@ -17,7 +17,8 @@ import (
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/aws/aws-sdk-go/service/s3/s3manager"
-	metalgo "github.com/metal-stack/metal-go"
+	apiclient "github.com/metal-stack/api/go/client"
+
 	synclister "github.com/metal-stack/metal-image-cache-sync/cmd/internal/determine-sync-images"
 	"github.com/metal-stack/metal-image-cache-sync/cmd/internal/metrics"
 	"github.com/metal-stack/metal-image-cache-sync/cmd/internal/sync"
@@ -164,11 +165,14 @@ func run() error {
 		return err
 	}
 
-	mc, err := metalgo.NewDriver(c.MetalAPIEndpoint, "", c.MetalAPIHMAC, metalgo.AuthType("Metal-View"))
-	if err != nil {
-		logger.Error("cannot create metal-api client", "error", err)
-		return err
+	dialConfig := apiclient.DialConfig{
+		BaseURL:   c.MetalAPIServerURL,
+		Token:     c.MetalAPIServerToken,
+		UserAgent: "metal-image-cache-sync",
+		Debug:     viper.GetBool("debug"),
 	}
+
+	mc := apiclient.New(dialConfig)
 
 	imageCollector := metrics.MustImageMetrics(logger.WithGroup("metrics"), c.GetImageRootPath())
 	kernelCollector := metrics.MustKernelMetrics(logger.WithGroup("metrics"), c.GetKernelRootPath())
@@ -311,7 +315,7 @@ func (c *cacheFileHandler) handle(w http.ResponseWriter, r *http.Request) {
 	case http.StatusOK:
 		c.collector.IncrementDownloads()
 	case 0:
-		// occurs when just visting directories through browser, swallow
+		// occurs when just visiting directories through browser, swallow
 	default:
 		logger.Info("responded with error code for download", "url", r.URL.String(), "code", code)
 	}

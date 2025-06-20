@@ -20,8 +20,8 @@ type Config struct {
 	KernelCacheBindAddress    string
 	BootImageCacheBindAddress string
 
-	MetalAPIEndpoint string `validate:"required"`
-	MetalAPIHMAC     string `validate:"required"`
+	MetalAPIServerURL   string `validate:"required"`
+	MetalAPIServerToken string `validate:"required"`
 
 	SyncSchedule string `validate:"required"`
 	DryRun       bool
@@ -45,8 +45,8 @@ func NewConfig() (*Config, error) {
 		KernelCacheEnabled:        viper.GetBool("enable-kernel-cache"),
 		BootImageCacheEnabled:     viper.GetBool("enable-boot-image-cache"),
 		ImageCacheBindAddress:     viper.GetString("image-cache-bind-address"),
-		MetalAPIEndpoint:          viper.GetString("metal-api-endpoint"),
-		MetalAPIHMAC:              viper.GetString("metal-api-hmac"),
+		MetalAPIServerURL:         viper.GetString("metal-apiserver-url"),
+		MetalAPIServerToken:       viper.GetString("metal-apiserver-token"),
 		BootImageCacheBindAddress: viper.GetString("boot-image-cache-bind-address"),
 		KernelCacheBindAddress:    viper.GetString("kernel-cache-bind-address"),
 		MinImagesPerName:          viper.GetInt("min-images-per-name"),

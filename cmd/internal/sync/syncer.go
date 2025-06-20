@@ -311,11 +311,8 @@ func (s *Syncer) printSyncPlan(remove api.CacheEntities, keep []api.CacheEntity,
 
 	s.logger.Info("sync plan", "amount", len(keep)+len(add), "cache-size-after-sync", units.BytesSize(float64(cacheSize)))
 	table := tablewriter.NewWriter(os.Stdout)
-	table.SetHeader([]string{"ID", "Path", "Size", "Action"})
-
-	for _, v := range data {
-		table.Append(v)
-	}
+	table.Header([]string{"ID", "Path", "Size", "Action"})
+	table.Bulk(data)
 	table.Render()
 }
 

@@ -75,8 +75,8 @@ func init() {
 	rootCmd.Flags().String("image-store", "metal-stack.io", "url to the image store")
 	rootCmd.Flags().String("image-store-bucket", "images", "bucket of the image store")
 
-	rootCmd.Flags().String("metal-api-endpoint", "", "endpoint of the metal-api")
-	rootCmd.Flags().String("metal-api-hmac", "", "hmac of the metal-api (requires view access)")
+	rootCmd.Flags().String("metal-apiserver-url", "", "url of the metal-apiserver")
+	rootCmd.Flags().String("metal-apiserver-toke", "", "token to talk to the metal-apiserver (requires image.list and partition.list access)")
 
 	rootCmd.Flags().String("schedule", "*/10 * * * *", "cron sync schedule")
 	rootCmd.Flags().Bool("dry-run", false, "does not download any images, useful for development purposes")
@@ -322,10 +322,13 @@ func (c *cacheFileHandler) handle(w http.ResponseWriter, r *http.Request) {
 }
 
 func runSync(c *api.Config) error {
-	var errs []error
+	var (
+		errs []error
+		ctx  = context.Background()
+	)
 
 	err := func() error {
-		syncImages, err := lister.DetermineImageSyncList()
+		syncImages, err := lister.DetermineImageSyncList(ctx)
 		if err != nil {
 			return fmt.Errorf("cannot gather images:%w", err)
 		}
@@ -347,7 +350,7 @@ func runSync(c *api.Config) error {
 	}
 
 	err = func() error {
-		syncKernels, err := lister.DetermineKernelSyncList()
+		syncKernels, err := lister.DetermineKernelSyncList(ctx)
 		if err != nil {
 			return fmt.Errorf("cannot kernel images:%w", err)
 		}
@@ -369,7 +372,7 @@ func runSync(c *api.Config) error {
 	}
 
 	err = func() error {
-		syncImages, err := lister.DetermineBootImageSyncList()
+		syncImages, err := lister.DetermineBootImageSyncList(ctx)
 		if err != nil {
 			return fmt.Errorf("cannot gather boot images:%w", err)
 		}

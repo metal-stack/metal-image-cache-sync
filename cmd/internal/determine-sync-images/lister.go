@@ -43,13 +43,13 @@ func NewSyncLister(logger *slog.Logger, client apiclient.Client, s3 *s3.S3, imag
 	}
 }
 
-func (s *SyncLister) DetermineImageSyncList() ([]*api.OS, error) {
+func (s *SyncLister) DetermineImageSyncList(ctx context.Context) ([]*api.OS, error) {
 	s3Images, err := s.retrieveImagesFromS3()
 	if err != nil {
 		return nil, fmt.Errorf("error listing images in s3:%w", err)
 	}
 
-	resp, err := s.client.Apiv2().Image().List(context.Background(), connect.NewRequest(&apiv2.ImageServiceListRequest{}))
+	resp, err := s.client.Apiv2().Image().List(ctx, connect.NewRequest(&apiv2.ImageServiceListRequest{}))
 	if err != nil {
 		return nil, fmt.Errorf("error listing images:%w", err)
 	}
@@ -165,8 +165,8 @@ func (s *SyncLister) isExcluded(url string) bool {
 	return false
 }
 
-func (s *SyncLister) DetermineKernelSyncList() ([]api.Kernel, error) {
-	resp, err := s.client.Apiv2().Partition().List(context.Background(), connect.NewRequest(&apiv2.PartitionServiceListRequest{}))
+func (s *SyncLister) DetermineKernelSyncList(ctx context.Context) ([]api.Kernel, error) {
+	resp, err := s.client.Apiv2().Partition().List(ctx, connect.NewRequest(&apiv2.PartitionServiceListRequest{}))
 	if err != nil {
 		return nil, fmt.Errorf("error listing partitions:%w", err)
 	}
@@ -212,8 +212,8 @@ func (s *SyncLister) DetermineKernelSyncList() ([]api.Kernel, error) {
 	return result, nil
 }
 
-func (s *SyncLister) DetermineBootImageSyncList() ([]api.BootImage, error) {
-	resp, err := s.client.Apiv2().Partition().List(context.Background(), connect.NewRequest(&apiv2.PartitionServiceListRequest{}))
+func (s *SyncLister) DetermineBootImageSyncList(ctx context.Context) ([]api.BootImage, error) {
+	resp, err := s.client.Apiv2().Partition().List(ctx, connect.NewRequest(&apiv2.PartitionServiceListRequest{}))
 	if err != nil {
 		return nil, fmt.Errorf("error listing partitions:%w", err)
 	}

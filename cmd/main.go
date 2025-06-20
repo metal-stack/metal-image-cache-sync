@@ -76,7 +76,7 @@ func init() {
 	rootCmd.Flags().String("image-store-bucket", "images", "bucket of the image store")
 
 	rootCmd.Flags().String("metal-apiserver-url", "", "url of the metal-apiserver")
-	rootCmd.Flags().String("metal-apiserver-toke", "", "token to talk to the metal-apiserver (requires image.list and partition.list access)")
+	rootCmd.Flags().String("metal-apiserver-token", "", "token to talk to the metal-apiserver (requires image.list and partition.list access)")
 
 	rootCmd.Flags().String("schedule", "*/10 * * * *", "cron sync schedule")
 	rootCmd.Flags().Bool("dry-run", false, "does not download any images, useful for development purposes")

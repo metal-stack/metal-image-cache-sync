@@ -76,7 +76,7 @@ func init() {
 	rootCmd.Flags().String("image-store-bucket", "images", "bucket of the image store")
 
 	rootCmd.Flags().String("metal-apiserver-url", "", "url of the metal-apiserver")
-	rootCmd.Flags().String("metal-apiserver-token", "", "token to talk to the metal-apiserver (requires image.list and partition.list access)")
+	rootCmd.Flags().String("metal-apiserver-token-path", "", "path to the file with the token to talk to the metal-apiserver (requires image.list and partition.list and token.refresh access)")
 
 	rootCmd.Flags().String("schedule", "*/10 * * * *", "cron sync schedule")
 	rootCmd.Flags().Bool("dry-run", false, "does not download any images, useful for development purposes")
@@ -165,14 +165,35 @@ func run() error {
 		return err
 	}
 
-	dialConfig := apiclient.DialConfig{
-		BaseURL:   c.MetalAPIServerURL,
-		Token:     c.MetalAPIServerToken,
-		UserAgent: "metal-image-cache-sync",
-		Debug:     viper.GetBool("debug"),
+	tokenPersister, err := apiclient.NewFilesystemTokenPersiter(c.MetalAPIServerTokenPath)
+	if err != nil {
+		logger.Error("error creating token persister", "error", err)
+		return err
 	}
 
-	mc := apiclient.New(dialConfig)
+	token, err := os.ReadFile(c.MetalAPIServerTokenPath)
+	if err != nil {
+		logger.Error("error reading token", "error", err)
+		return err
+	}
+
+	dialConfig := &apiclient.DialConfig{
+		BaseURL:   c.MetalAPIServerURL,
+		Token:     string(token),
+		UserAgent: "metal-image-cache-sync",
+		Debug:     viper.GetBool("debug"),
+		Log:       logger,
+		TokenRenewal: &apiclient.TokenRenewal{
+			ReplaceBefore:  24 * time.Hour,
+			PersistTokenFn: tokenPersister,
+		},
+	}
+
+	mc, err := apiclient.New(dialConfig)
+	if err != nil {
+		logger.Error("error creating apiserver client", "error", err)
+		return err
+	}
 
 	imageCollector := metrics.MustImageMetrics(logger.WithGroup("metrics"), c.GetImageRootPath())
 	kernelCollector := metrics.MustKernelMetrics(logger.WithGroup("metrics"), c.GetKernelRootPath())

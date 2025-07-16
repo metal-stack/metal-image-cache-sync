@@ -177,9 +177,13 @@ func run() error {
 		return err
 	}
 
+	cleantoken := strings.TrimSpace(string(token))
+
+	logger.Info("using token", "token", token)
+
 	dialConfig := &apiclient.DialConfig{
 		BaseURL:   c.MetalAPIServerURL,
-		Token:     string(token),
+		Token:     cleantoken,
 		UserAgent: "metal-image-cache-sync",
 		Debug:     viper.GetBool("debug"),
 		Log:       logger,

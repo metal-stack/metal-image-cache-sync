@@ -9,7 +9,7 @@ require (
 	github.com/docker/go-units v0.5.0
 	github.com/go-playground/validator/v10 v10.27.0
 	github.com/google/go-cmp v0.7.0
-	github.com/metal-stack/api v0.0.4
+	github.com/metal-stack/api v0.0.5
 	github.com/metal-stack/v v1.0.3
 	github.com/olekukonko/tablewriter v1.0.8
 	github.com/prometheus/client_golang v1.22.0

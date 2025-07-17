@@ -10,7 +10,7 @@ on:
       - master
 
 jobs:
-  draft:
+  release-draft:
     uses: metal-stack/.github/.github/workflows/release-drafter.yaml@main
     secrets:
         token: ${{ secrets.GITHUB_TOKEN }}

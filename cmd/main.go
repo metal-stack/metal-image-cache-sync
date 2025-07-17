@@ -188,7 +188,6 @@ func run() error {
 		Debug:     viper.GetBool("debug"),
 		Log:       logger,
 		TokenRenewal: &apiclient.TokenRenewal{
-			ReplaceBefore:  24 * time.Hour,
 			PersistTokenFn: tokenPersister,
 		},
 	}

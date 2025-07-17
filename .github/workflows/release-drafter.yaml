@@ -5,11 +5,12 @@ on:
   push:
     branches:
       - master
+  pull_request:
+    branches:
+      - master
 
 jobs:
-  build:
-    runs-on: ubuntu-latest
-    steps:
-    - uses: release-drafter/release-drafter@v5
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  draft:
+    uses: metal-stack/.github/.github/workflows/release-drafter.yaml@main
+    secrets:
+        token: ${{ secrets.GITHUB_TOKEN }}

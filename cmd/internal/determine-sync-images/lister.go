@@ -11,7 +11,6 @@ import (
 	"strings"
 	"time"
 
-	"connectrpc.com/connect"
 	"github.com/aws/aws-sdk-go/service/s3"
 	apiclient "github.com/metal-stack/api/go/client"
 	apiv2 "github.com/metal-stack/api/go/metalstack/api/v2"
@@ -49,17 +48,17 @@ func (s *SyncLister) DetermineImageSyncList(ctx context.Context) ([]*api.OS, err
 		return nil, fmt.Errorf("error listing images in s3:%w", err)
 	}
 
-	resp, err := s.client.Apiv2().Image().List(ctx, connect.NewRequest(&apiv2.ImageServiceListRequest{}))
+	resp, err := s.client.Apiv2().Image().List(ctx, &apiv2.ImageServiceListRequest{})
 	if err != nil {
 		return nil, fmt.Errorf("error listing images:%w", err)
 	}
 
-	s.imageCollector.SetMetalAPIImageCount(len(resp.Msg.Images))
+	s.imageCollector.SetMetalAPIImageCount(len(resp.Images))
 
 	expirationGraceDays := 24 * time.Hour * time.Duration(s.config.ExpirationGraceDays) // nolint:gosec
 
 	images := api.OSImagesByOS{}
-	for _, img := range resp.Msg.Images {
+	for _, img := range resp.Images {
 		if s.isExcluded(img.Url) {
 			s.logger.Debug("skipping image with exclude URL", "id", img.Id)
 			continue
@@ -150,7 +149,7 @@ func (s *SyncLister) DetermineImageSyncList(ctx context.Context) ([]*api.OS, err
 		}
 	}
 
-	s.imageCollector.SetUnsyncedImageCount(len(resp.Msg.Images) - len(syncImages))
+	s.imageCollector.SetUnsyncedImageCount(len(resp.Images) - len(syncImages))
 
 	return syncImages, nil
 }
@@ -166,7 +165,7 @@ func (s *SyncLister) isExcluded(url string) bool {
 }
 
 func (s *SyncLister) DetermineKernelSyncList(ctx context.Context) ([]api.Kernel, error) {
-	resp, err := s.client.Apiv2().Partition().List(ctx, connect.NewRequest(&apiv2.PartitionServiceListRequest{}))
+	resp, err := s.client.Apiv2().Partition().List(ctx, &apiv2.PartitionServiceListRequest{})
 	if err != nil {
 		return nil, fmt.Errorf("error listing partitions:%w", err)
 	}
@@ -174,7 +173,7 @@ func (s *SyncLister) DetermineKernelSyncList(ctx context.Context) ([]api.Kernel,
 	var result []api.Kernel
 	urls := map[string]bool{}
 
-	for _, p := range resp.Msg.Partitions {
+	for _, p := range resp.Partitions {
 		if p.BootConfiguration == nil {
 			continue
 		}
@@ -213,7 +212,7 @@ func (s *SyncLister) DetermineKernelSyncList(ctx context.Context) ([]api.Kernel,
 }
 
 func (s *SyncLister) DetermineBootImageSyncList(ctx context.Context) ([]api.BootImage, error) {
-	resp, err := s.client.Apiv2().Partition().List(ctx, connect.NewRequest(&apiv2.PartitionServiceListRequest{}))
+	resp, err := s.client.Apiv2().Partition().List(ctx, &apiv2.PartitionServiceListRequest{})
 	if err != nil {
 		return nil, fmt.Errorf("error listing partitions:%w", err)
 	}
@@ -221,7 +220,7 @@ func (s *SyncLister) DetermineBootImageSyncList(ctx context.Context) ([]api.Boot
 	var result []api.BootImage
 	urls := map[string]bool{}
 
-	for _, p := range resp.Msg.Partitions {
+	for _, p := range resp.Partitions {
 		if p.BootConfiguration == nil {
 			continue
 		}

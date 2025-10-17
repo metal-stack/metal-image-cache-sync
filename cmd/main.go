@@ -165,7 +165,7 @@ func run() error {
 		return err
 	}
 
-	tokenPersister, err := apiclient.NewFilesystemTokenPersiter(c.MetalAPIServerTokenPath)
+	tokenPersister, err := apiclient.NewFilesystemTokenPersister(c.MetalAPIServerTokenPath)
 	if err != nil {
 		logger.Error("error creating token persister", "error", err)
 		return err
@@ -185,7 +185,6 @@ func run() error {
 		BaseURL:   c.MetalAPIServerURL,
 		Token:     cleantoken,
 		UserAgent: "metal-image-cache-sync",
-		Debug:     viper.GetBool("debug"),
 		Log:       logger,
 		TokenRenewal: &apiclient.TokenRenewal{
 			PersistTokenFn: tokenPersister,

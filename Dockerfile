@@ -5,5 +5,7 @@ COPY . .
 RUN make all
 
 FROM gcr.io/distroless/static-debian12
+COPY ca.pem /etc/ssl/certs/ca-certificates.crt
+RUN update-ca-certificates
 COPY --from=builder /work/bin/metal-image-cache-sync /metal-image-cache-sync
 CMD ["/metal-image-cache-sync"]

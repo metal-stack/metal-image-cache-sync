@@ -53,6 +53,8 @@ func (s *SyncLister) DetermineImageSyncList() ([]api.OS, error) {
 		return nil, fmt.Errorf("error listing images:%w", err)
 	}
 
+	s.logger.Info("image list response", "list", resp.Payload)
+
 	s.imageCollector.SetMetalAPIImageCount(len(resp.Payload))
 
 	expirationGraceDays := 24 * time.Hour * time.Duration(s.config.ExpirationGraceDays) // nolint:gosec

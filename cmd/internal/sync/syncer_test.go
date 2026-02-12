@@ -247,7 +247,7 @@ func TestSyncer_defineImageDiff(t *testing.T) {
 					BucketKey:  "metal-os/master/ubuntu/19.4/20201025/img.tar.lz4",
 					BucketName: "metal-os",
 					MD5Ref: s3.Object{
-						Key: strPtr("metal-os/master/ubuntu/19.4/20201025/img.tar.lz4.md5"),
+						Key: new("metal-os/master/ubuntu/19.4/20201025/img.tar.lz4.md5"),
 					},
 				},
 			},
@@ -262,7 +262,7 @@ func TestSyncer_defineImageDiff(t *testing.T) {
 					BucketKey:  "metal-os/master/ubuntu/19.4/20201025/img.tar.lz4",
 					BucketName: "metal-os",
 					MD5Ref: s3.Object{
-						Key: strPtr("metal-os/master/ubuntu/19.4/20201025/img.tar.lz4.md5"),
+						Key: new("metal-os/master/ubuntu/19.4/20201025/img.tar.lz4.md5"),
 					},
 				},
 			},
@@ -285,7 +285,7 @@ func TestSyncer_defineImageDiff(t *testing.T) {
 					BucketKey:  "metal-os/master/ubuntu/19.4/20201025/img.tar.lz4",
 					BucketName: "metal-os",
 					MD5Ref: s3.Object{
-						Key: strPtr("metal-os/master/ubuntu/19.4/20201025/img.tar.lz4.md5"),
+						Key: new("metal-os/master/ubuntu/19.4/20201025/img.tar.lz4.md5"),
 					},
 				},
 			},
@@ -300,7 +300,7 @@ func TestSyncer_defineImageDiff(t *testing.T) {
 					BucketKey:  "metal-os/master/ubuntu/19.4/20201025/img.tar.lz4",
 					BucketName: "metal-os",
 					MD5Ref: s3.Object{
-						Key: strPtr("metal-os/master/ubuntu/19.4/20201025/img.tar.lz4.md5"),
+						Key: new("metal-os/master/ubuntu/19.4/20201025/img.tar.lz4.md5"),
 					},
 				},
 			},
@@ -346,10 +346,6 @@ func TestSyncer_defineImageDiff(t *testing.T) {
 			}
 		})
 	}
-}
-
-func strPtr(s string) *string {
-	return &s
 }
 
 func Test_cleanEmptyDirs(t *testing.T) {

@@ -123,7 +123,6 @@ func (s *SyncLister) DetermineImageSyncList(ctx context.Context) ([]*api.OS, err
 	var syncImages []*api.OS
 	for _, versions := range images {
 		for _, versionedImages := range versions {
-			versionedImages := versionedImages
 			sort.Slice(versionedImages, func(i, j int) bool {
 				return versionedImages[i].Version.GreaterThan(versionedImages[j].Version)
 			})

@@ -54,7 +54,7 @@ func (l LocalFile) Download(ctx context.Context, target afero.File, c *http.Clie
 
 func semverOrURL(url string) string {
 	// try to find a semver version somewhere in the path...
-	for _, p := range strings.Split(url, "/") {
+	for p := range strings.SplitSeq(url, "/") {
 		version, err := semver.NewVersion(strings.TrimPrefix(p, "v"))
 		if err == nil {
 			return version.String()

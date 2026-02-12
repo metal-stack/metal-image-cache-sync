@@ -257,7 +257,6 @@ func run() error {
 
 	var srvs []*http.Server
 	for _, h := range handlers {
-		h := h
 		router := http.NewServeMux()
 
 		router.Handle("/metrics", promhttp.HandlerFor(h.collector.GetGatherer(), promhttp.HandlerOpts{}))

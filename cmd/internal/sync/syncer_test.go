@@ -75,7 +75,6 @@ func Test_currentFileIndex(t *testing.T) {
 		},
 	}
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			fs := afero.NewMemMapFs()
 			require.NoError(t, fs.MkdirAll(cacheRoot, 0755))
@@ -310,7 +309,6 @@ func TestSyncer_defineImageDiff(t *testing.T) {
 		},
 	}
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			fs := afero.NewMemMapFs()
 			require.NoError(t, fs.MkdirAll(cacheRoot, 0755))
@@ -461,7 +459,6 @@ func Test_cleanEmptyDirs(t *testing.T) {
 		},
 	}
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			fs := afero.NewMemMapFs()
 			require.NoError(t, fs.MkdirAll(cacheRoot, 0755))

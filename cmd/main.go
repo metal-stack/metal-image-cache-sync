@@ -18,6 +18,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/aws/aws-sdk-go/service/s3/s3manager"
 	apiclient "github.com/metal-stack/api/go/client"
+	apiv2 "github.com/metal-stack/api/go/metalstack/api/v2"
 
 	synclister "github.com/metal-stack/metal-image-cache-sync/cmd/internal/determine-sync-images"
 	"github.com/metal-stack/metal-image-cache-sync/cmd/internal/metrics"
@@ -294,6 +295,18 @@ func run() error {
 	}
 	cronjob.Start()
 	logger.Info("scheduling next sync", "at", cronjob.Entry(id).Next.String())
+
+	// Ping apiserver every 5min
+	mc.Ping(stop, &apiclient.PingConfig{
+		ComponentType: apiv2.ComponentType_COMPONENT_TYPE_METAL_IMAGE_CACHE_SYNC,
+		StartedAt:     time.Now(),
+		Version: apiv2.Version{
+			Version:   v.Version,
+			Revision:  v.Revision,
+			GitSha1:   v.GitSHA1,
+			BuildDate: v.BuildDate,
+		},
+	})
 
 	<-stop.Done()
 	logger.Info("received stop signal, shutting down...")

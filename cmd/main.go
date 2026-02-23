@@ -100,6 +100,8 @@ func init() {
 
 	rootCmd.Flags().StringSlice("excludes", []string{"/pull_requests/"}, "url paths to exclude from the sync")
 
+	rootCmd.Flags().String("hostname", "", "hostname to set which is used as identifier in a ping command to the metal-apiserver")
+
 	err := viper.BindPFlags(rootCmd.Flags())
 	if err != nil {
 		log.Fatalf("error setup root cmd: %v", err)
@@ -296,8 +298,7 @@ func run() error {
 	cronjob.Start()
 	logger.Info("scheduling next sync", "at", cronjob.Entry(id).Next.String())
 
-	// Ping apiserver every 5min
-	mc.Ping(stop, &apiclient.PingConfig{
+	pingCfg := &apiclient.PingConfig{
 		ComponentType: apiv2.ComponentType_COMPONENT_TYPE_METAL_IMAGE_CACHE_SYNC,
 		StartedAt:     time.Now(),
 		Version: apiv2.Version{
@@ -306,7 +307,15 @@ func run() error {
 			GitSha1:   v.GitSHA1,
 			BuildDate: v.BuildDate,
 		},
-	})
+	}
+
+	hostname := viper.GetString("hostname")
+	if hostname != "" {
+		pingCfg.Identifier = &hostname
+	}
+
+	// Ping apiserver every 5min
+	mc.Ping(stop, pingCfg)
 
 	<-stop.Done()
 	logger.Info("received stop signal, shutting down...")

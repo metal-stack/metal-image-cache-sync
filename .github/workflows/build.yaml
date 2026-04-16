@@ -16,7 +16,7 @@ jobs:
   draft:
     uses: metal-stack/actions-common/.github/workflows/release-drafter.yaml@v1
 
-  build:
+  go-build:
     uses: metal-stack/actions-common/.github/workflows/go-build.yaml@v1
     secrets: inherit
     with:

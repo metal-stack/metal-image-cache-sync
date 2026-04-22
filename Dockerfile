@@ -1,9 +1,3 @@
-FROM golang:1.26-bookworm AS builder
-
-WORKDIR /work
-COPY . .
-RUN make all
-
 FROM gcr.io/distroless/static-debian13
-COPY --from=builder /work/bin/metal-image-cache-sync /metal-image-cache-sync
+COPY bin/metal-image-cache-sync /metal-image-cache-sync
 CMD ["/metal-image-cache-sync"]

@@ -17,7 +17,9 @@ import (
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/aws/aws-sdk-go/service/s3/s3manager"
-	metalgo "github.com/metal-stack/metal-go"
+	apiclient "github.com/metal-stack/api/go/client"
+	apiv2 "github.com/metal-stack/api/go/metalstack/api/v2"
+
 	synclister "github.com/metal-stack/metal-image-cache-sync/cmd/internal/determine-sync-images"
 	"github.com/metal-stack/metal-image-cache-sync/cmd/internal/metrics"
 	"github.com/metal-stack/metal-image-cache-sync/cmd/internal/sync"
@@ -74,8 +76,8 @@ func init() {
 	rootCmd.Flags().String("image-store", "metal-stack.io", "url to the image store")
 	rootCmd.Flags().String("image-store-bucket", "images", "bucket of the image store")
 
-	rootCmd.Flags().String("metal-api-endpoint", "", "endpoint of the metal-api")
-	rootCmd.Flags().String("metal-api-hmac", "", "hmac of the metal-api (requires view access)")
+	rootCmd.Flags().String("metal-apiserver-url", "", "url of the metal-apiserver")
+	rootCmd.Flags().String("metal-apiserver-token-path", "", "path to the file with the token to talk to the metal-apiserver (requires image.list and partition.list and token.refresh access)")
 
 	rootCmd.Flags().String("schedule", "*/10 * * * *", "cron sync schedule")
 	rootCmd.Flags().Bool("dry-run", false, "does not download any images, useful for development purposes")
@@ -97,6 +99,8 @@ func init() {
 	rootCmd.Flags().String("boot-image-cache-bind-address", "0.0.0.0:3002", "kernel cache http server bind address")
 
 	rootCmd.Flags().StringSlice("excludes", []string{"/pull_requests/"}, "url paths to exclude from the sync")
+
+	rootCmd.Flags().String("hostname", "", "hostname to set which is used as identifier in a ping command to the metal-apiserver")
 
 	err := viper.BindPFlags(rootCmd.Flags())
 	if err != nil {
@@ -164,9 +168,35 @@ func run() error {
 		return err
 	}
 
-	mc, err := metalgo.NewDriver(c.MetalAPIEndpoint, "", c.MetalAPIHMAC, metalgo.AuthType("Metal-View"))
+	tokenPersister, err := apiclient.NewFilesystemTokenPersister(c.MetalAPIServerTokenPath)
 	if err != nil {
-		logger.Error("cannot create metal-api client", "error", err)
+		logger.Error("error creating token persister", "error", err)
+		return err
+	}
+
+	token, err := os.ReadFile(c.MetalAPIServerTokenPath)
+	if err != nil {
+		logger.Error("error reading token", "error", err)
+		return err
+	}
+
+	cleantoken := strings.TrimSpace(string(token))
+
+	logger.Info("using token", "token", token)
+
+	dialConfig := &apiclient.DialConfig{
+		BaseURL:   c.MetalAPIServerURL,
+		Token:     cleantoken,
+		UserAgent: "metal-image-cache-sync",
+		Log:       logger,
+		TokenRenewal: &apiclient.TokenRenewal{
+			PersistTokenFn: tokenPersister,
+		},
+	}
+
+	mc, err := apiclient.New(dialConfig)
+	if err != nil {
+		logger.Error("error creating apiserver client", "error", err)
 		return err
 	}
 
@@ -230,7 +260,6 @@ func run() error {
 
 	var srvs []*http.Server
 	for _, h := range handlers {
-		h := h
 		router := http.NewServeMux()
 
 		router.Handle("/metrics", promhttp.HandlerFor(h.collector.GetGatherer(), promhttp.HandlerOpts{}))
@@ -268,6 +297,25 @@ func run() error {
 	}
 	cronjob.Start()
 	logger.Info("scheduling next sync", "at", cronjob.Entry(id).Next.String())
+
+	pingCfg := &apiclient.PingConfig{
+		ComponentType: apiv2.ComponentType_COMPONENT_TYPE_METAL_IMAGE_CACHE_SYNC,
+		StartedAt:     time.Now(),
+		Version: apiv2.Version{
+			Version:   v.Version,
+			Revision:  v.Revision,
+			GitSha1:   v.GitSHA1,
+			BuildDate: v.BuildDate,
+		},
+	}
+
+	hostname := viper.GetString("hostname")
+	if hostname != "" {
+		pingCfg.Identifier = &hostname
+	}
+
+	// Ping apiserver every 5min
+	mc.Ping(stop, pingCfg)
 
 	<-stop.Done()
 	logger.Info("received stop signal, shutting down...")
@@ -311,17 +359,20 @@ func (c *cacheFileHandler) handle(w http.ResponseWriter, r *http.Request) {
 	case http.StatusOK:
 		c.collector.IncrementDownloads()
 	case 0:
-		// occurs when just visting directories through browser, swallow
+		// occurs when just visiting directories through browser, swallow
 	default:
 		logger.Info("responded with error code for download", "url", r.URL.String(), "code", code)
 	}
 }
 
 func runSync(c *api.Config) error {
-	var errs []error
+	var (
+		errs []error
+		ctx  = context.Background()
+	)
 
 	err := func() error {
-		syncImages, err := lister.DetermineImageSyncList()
+		syncImages, err := lister.DetermineImageSyncList(ctx)
 		if err != nil {
 			return fmt.Errorf("cannot gather images:%w", err)
 		}
@@ -343,7 +394,7 @@ func runSync(c *api.Config) error {
 	}
 
 	err = func() error {
-		syncKernels, err := lister.DetermineKernelSyncList()
+		syncKernels, err := lister.DetermineKernelSyncList(ctx)
 		if err != nil {
 			return fmt.Errorf("cannot kernel images:%w", err)
 		}
@@ -365,7 +416,7 @@ func runSync(c *api.Config) error {
 	}
 
 	err = func() error {
-		syncImages, err := lister.DetermineBootImageSyncList()
+		syncImages, err := lister.DetermineBootImageSyncList(ctx)
 		if err != nil {
 			return fmt.Errorf("cannot gather boot images:%w", err)
 		}

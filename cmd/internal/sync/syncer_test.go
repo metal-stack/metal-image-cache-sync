@@ -18,13 +18,13 @@ import (
 	"github.com/aws/aws-sdk-go/awstesting/unit"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/aws/aws-sdk-go/service/s3/s3manager"
-	"github.com/go-openapi/strfmt"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/metal-stack/metal-image-cache-sync/pkg/api"
 	"github.com/spf13/afero"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/testing/protocmp"
 )
 
 const (
@@ -75,7 +75,6 @@ func Test_currentFileIndex(t *testing.T) {
 		},
 	}
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			fs := afero.NewMemMapFs()
 			require.NoError(t, fs.MkdirAll(cacheRoot, 0755))
@@ -87,7 +86,7 @@ func Test_currentFileIndex(t *testing.T) {
 				t.Errorf("Syncer.currentImageIndex() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
-			if diff := cmp.Diff(got, tt.want, cmpopts.IgnoreUnexported(strfmt.DateTime{})); diff != "" {
+			if diff := cmp.Diff(got, tt.want, cmpopts.IgnoreUnexported()); diff != "" {
 				t.Errorf("Syncer.currentImageIndex() diff = %v", diff)
 			}
 		})
@@ -171,12 +170,12 @@ func TestSyncer_defineImageDiff(t *testing.T) {
 		{
 			name: "remove unexisting images",
 			currentImages: api.CacheEntities{
-				api.OS{
+				&api.OS{
 					BucketKey:  "metal-os/master/ubuntu/19.4/20201025/img.tar.lz4",
 					BucketName: "metal-os",
 					Version:    &semver.Version{},
 				},
-				api.OS{
+				&api.OS{
 					BucketKey:  "metal-os/master/ubuntu/19.4/20201026/img.tar.lz4",
 					BucketName: "metal-os",
 					Version:    &semver.Version{},
@@ -185,12 +184,12 @@ func TestSyncer_defineImageDiff(t *testing.T) {
 			wantImages: nil,
 			add:        nil,
 			remove: api.CacheEntities{
-				api.OS{
+				&api.OS{
 					BucketKey:  "metal-os/master/ubuntu/19.4/20201025/img.tar.lz4",
 					BucketName: "metal-os",
 					Version:    &semver.Version{},
 				},
-				api.OS{
+				&api.OS{
 					BucketKey:  "metal-os/master/ubuntu/19.4/20201026/img.tar.lz4",
 					BucketName: "metal-os",
 					Version:    &semver.Version{},
@@ -202,13 +201,13 @@ func TestSyncer_defineImageDiff(t *testing.T) {
 			name:          "add new images",
 			currentImages: nil,
 			wantImages: api.CacheEntities{
-				api.OS{
+				&api.OS{
 					Name:       "ubuntu",
 					Version:    semver.MustParse("19.4"),
 					BucketKey:  "metal-os/master/ubuntu/19.4/20201025/img.tar.lz4",
 					BucketName: "metal-os",
 				},
-				api.OS{
+				&api.OS{
 					Name:       "debian",
 					Version:    semver.MustParse("20.4"),
 					BucketKey:  "metal-os/master/ubuntu/20.4/20201025/img.tar.lz4",
@@ -216,13 +215,13 @@ func TestSyncer_defineImageDiff(t *testing.T) {
 				},
 			},
 			add: api.CacheEntities{
-				api.OS{
+				&api.OS{
 					Name:       "ubuntu",
 					Version:    semver.MustParse("19.4"),
 					BucketKey:  "metal-os/master/ubuntu/19.4/20201025/img.tar.lz4",
 					BucketName: "metal-os",
 				},
-				api.OS{
+				&api.OS{
 					Name:       "debian",
 					Version:    semver.MustParse("20.4"),
 					BucketKey:  "metal-os/master/ubuntu/20.4/20201025/img.tar.lz4",
@@ -235,20 +234,20 @@ func TestSyncer_defineImageDiff(t *testing.T) {
 		{
 			name: "don't download existing images when checksum is proper",
 			currentImages: api.CacheEntities{
-				api.OS{
+				&api.OS{
 					BucketKey:  "metal-os/master/ubuntu/19.4/20201025/img.tar.lz4",
 					BucketName: "metal-os",
 					Version:    &semver.Version{},
 				},
 			},
 			wantImages: api.CacheEntities{
-				api.OS{
+				&api.OS{
 					Name:       "ubuntu",
 					Version:    semver.MustParse("19.4.20201025"),
 					BucketKey:  "metal-os/master/ubuntu/19.4/20201025/img.tar.lz4",
 					BucketName: "metal-os",
 					MD5Ref: s3.Object{
-						Key: strPtr("metal-os/master/ubuntu/19.4/20201025/img.tar.lz4.md5"),
+						Key: new("metal-os/master/ubuntu/19.4/20201025/img.tar.lz4.md5"),
 					},
 				},
 			},
@@ -257,13 +256,13 @@ func TestSyncer_defineImageDiff(t *testing.T) {
 			},
 			add: nil,
 			keep: api.CacheEntities{
-				api.OS{
+				&api.OS{
 					Name:       "ubuntu",
 					Version:    semver.MustParse("19.4.20201025"),
 					BucketKey:  "metal-os/master/ubuntu/19.4/20201025/img.tar.lz4",
 					BucketName: "metal-os",
 					MD5Ref: s3.Object{
-						Key: strPtr("metal-os/master/ubuntu/19.4/20201025/img.tar.lz4.md5"),
+						Key: new("metal-os/master/ubuntu/19.4/20201025/img.tar.lz4.md5"),
 					},
 				},
 			},
@@ -273,20 +272,20 @@ func TestSyncer_defineImageDiff(t *testing.T) {
 		{
 			name: "download existing images when checksum is incorrect",
 			currentImages: api.CacheEntities{
-				api.OS{
+				&api.OS{
 					BucketKey:  "metal-os/master/ubuntu/19.4/20201025/img.tar.lz4",
 					BucketName: "metal-os",
 					Version:    &semver.Version{},
 				},
 			},
 			wantImages: api.CacheEntities{
-				api.OS{
+				&api.OS{
 					Name:       "ubuntu",
 					Version:    semver.MustParse("19.4.20201025"),
 					BucketKey:  "metal-os/master/ubuntu/19.4/20201025/img.tar.lz4",
 					BucketName: "metal-os",
 					MD5Ref: s3.Object{
-						Key: strPtr("metal-os/master/ubuntu/19.4/20201025/img.tar.lz4.md5"),
+						Key: new("metal-os/master/ubuntu/19.4/20201025/img.tar.lz4.md5"),
 					},
 				},
 			},
@@ -295,13 +294,13 @@ func TestSyncer_defineImageDiff(t *testing.T) {
 			},
 			remoteChecksumFile: "not-equal",
 			add: api.CacheEntities{
-				api.OS{
+				&api.OS{
 					Name:       "ubuntu",
 					Version:    semver.MustParse("19.4.20201025"),
 					BucketKey:  "metal-os/master/ubuntu/19.4/20201025/img.tar.lz4",
 					BucketName: "metal-os",
 					MD5Ref: s3.Object{
-						Key: strPtr("metal-os/master/ubuntu/19.4/20201025/img.tar.lz4.md5"),
+						Key: new("metal-os/master/ubuntu/19.4/20201025/img.tar.lz4.md5"),
 					},
 				},
 			},
@@ -310,7 +309,6 @@ func TestSyncer_defineImageDiff(t *testing.T) {
 		},
 	}
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			fs := afero.NewMemMapFs()
 			require.NoError(t, fs.MkdirAll(cacheRoot, 0755))
@@ -337,21 +335,17 @@ func TestSyncer_defineImageDiff(t *testing.T) {
 				t.Errorf("Syncer.defineImageDiff() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
-			if diff := cmp.Diff(gotAdd, tt.add, cmpopts.IgnoreUnexported(strfmt.DateTime{})); diff != "" {
+			if diff := cmp.Diff(gotAdd, tt.add, protocmp.Transform(), cmpopts.IgnoreUnexported()); diff != "" {
 				t.Errorf("Syncer.defineImageDiff() add diff = %v", diff)
 			}
-			if diff := cmp.Diff(gotKeep, tt.keep, cmpopts.IgnoreUnexported(strfmt.DateTime{})); diff != "" {
+			if diff := cmp.Diff(gotKeep, tt.keep, protocmp.Transform(), cmpopts.IgnoreUnexported()); diff != "" {
 				t.Errorf("Syncer.defineImageDiff() keep diff = %v", diff)
 			}
-			if diff := cmp.Diff(gotRemove, tt.remove, cmpopts.IgnoreUnexported(strfmt.DateTime{})); diff != "" {
+			if diff := cmp.Diff(gotRemove, tt.remove, protocmp.Transform()); diff != "" {
 				t.Errorf("Syncer.defineImageDiff() remove diff = %v", diff)
 			}
 		})
 	}
-}
-
-func strPtr(s string) *string {
-	return &s
 }
 
 func Test_cleanEmptyDirs(t *testing.T) {
@@ -461,7 +455,6 @@ func Test_cleanEmptyDirs(t *testing.T) {
 		},
 	}
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			fs := afero.NewMemMapFs()
 			require.NoError(t, fs.MkdirAll(cacheRoot, 0755))

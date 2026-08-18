@@ -69,7 +69,10 @@ func (s *Syncer) Sync(rootPath string, entitiesToSync api.CacheEntities) error {
 		return fmt.Errorf("error creating cache diff:%w", err)
 	}
 
-	s.printSyncPlan(remove, keep, add)
+	err = s.printSyncPlan(remove, keep, add)
+	if err != nil {
+		return fmt.Errorf("error printing sync plan:%w", err)
+	}
 
 	if s.dry {
 		s.logger.Info("dry run: not downloading or deleting files")
@@ -237,7 +240,7 @@ func (s *Syncer) download(rootPath string, e api.CacheEntity) error {
 	}()
 
 	switch ent := e.(type) {
-	case api.OS:
+	case *api.OS:
 		s.imageCollector.AddSyncDownloadImageBytes(n)
 		s.imageCollector.IncrementSyncDownloadImageCount()
 	case api.BootImage:
@@ -294,7 +297,7 @@ func (s *Syncer) remove(rootPath string, e api.CacheEntity) error {
 	return nil
 }
 
-func (s *Syncer) printSyncPlan(remove api.CacheEntities, keep []api.CacheEntity, add []api.CacheEntity) {
+func (s *Syncer) printSyncPlan(remove api.CacheEntities, keep []api.CacheEntity, add []api.CacheEntity) error {
 	cacheSize := int64(0)
 	data := [][]string{}
 	for _, e := range remove {
@@ -311,12 +314,12 @@ func (s *Syncer) printSyncPlan(remove api.CacheEntities, keep []api.CacheEntity,
 
 	s.logger.Info("sync plan", "amount", len(keep)+len(add), "cache-size-after-sync", units.BytesSize(float64(cacheSize)))
 	table := tablewriter.NewWriter(os.Stdout)
-	table.SetHeader([]string{"ID", "Path", "Size", "Action"})
-
-	for _, v := range data {
-		table.Append(v)
+	table.Header([]string{"ID", "Path", "Size", "Action"})
+	err := table.Bulk(data)
+	if err != nil {
+		return err
 	}
-	table.Render()
+	return table.Render()
 }
 
 func cleanEmptyDirs(fs afero.Fs, rootPath string) error {

@@ -12,9 +12,9 @@ import (
 	"time"
 
 	"github.com/aws/aws-sdk-go/service/s3"
-	metalgo "github.com/metal-stack/metal-go"
-	"github.com/metal-stack/metal-go/api/client/image"
-	"github.com/metal-stack/metal-go/api/client/partition"
+	apiclient "github.com/metal-stack/api/go/client"
+	apiv2 "github.com/metal-stack/api/go/metalstack/api/v2"
+
 	"github.com/metal-stack/metal-image-cache-sync/cmd/internal/metrics"
 	"github.com/metal-stack/metal-image-cache-sync/pkg/api"
 	"github.com/metal-stack/metal-image-cache-sync/pkg/utils"
@@ -22,7 +22,7 @@ import (
 
 type SyncLister struct {
 	logger         *slog.Logger
-	client         metalgo.Client
+	client         apiclient.Client
 	config         *api.Config
 	s3             *s3.S3
 	stop           context.Context
@@ -30,7 +30,7 @@ type SyncLister struct {
 	httpClient     *http.Client
 }
 
-func NewSyncLister(logger *slog.Logger, client metalgo.Client, s3 *s3.S3, imageCollector *metrics.ImageCollector, config *api.Config, stop context.Context) *SyncLister {
+func NewSyncLister(logger *slog.Logger, client apiclient.Client, s3 *s3.S3, imageCollector *metrics.ImageCollector, config *api.Config, stop context.Context) *SyncLister {
 	return &SyncLister{
 		logger:         logger,
 		client:         client,
@@ -42,38 +42,38 @@ func NewSyncLister(logger *slog.Logger, client metalgo.Client, s3 *s3.S3, imageC
 	}
 }
 
-func (s *SyncLister) DetermineImageSyncList() ([]api.OS, error) {
+func (s *SyncLister) DetermineImageSyncList(ctx context.Context) ([]*api.OS, error) {
 	s3Images, err := s.retrieveImagesFromS3()
 	if err != nil {
 		return nil, fmt.Errorf("error listing images in s3:%w", err)
 	}
 
-	resp, err := s.client.Image().ListImages(image.NewListImagesParams(), nil)
+	resp, err := s.client.Apiv2().Image().List(ctx, &apiv2.ImageServiceListRequest{})
 	if err != nil {
 		return nil, fmt.Errorf("error listing images:%w", err)
 	}
 
-	s.imageCollector.SetMetalAPIImageCount(len(resp.Payload))
+	s.imageCollector.SetMetalAPIImageCount(len(resp.Images))
 
 	expirationGraceDays := 24 * time.Hour * time.Duration(s.config.ExpirationGraceDays) // nolint:gosec
 
 	images := api.OSImagesByOS{}
-	for _, img := range resp.Payload {
-		if s.isExcluded(img.URL) {
-			s.logger.Debug("skipping image with exclude URL", "id", *img.ID)
+	for _, img := range resp.Images {
+		if s.isExcluded(img.Url) {
+			s.logger.Debug("skipping image with exclude URL", "id", img.Id)
 			continue
 		}
 
-		if img.ExpirationDate != nil {
-			if time.Since(time.Time(*img.ExpirationDate)) > expirationGraceDays {
-				s.logger.Debug("not considering expired image, skipping", "id", *img.ID)
+		if img.ExpiresAt != nil {
+			if time.Since(img.ExpiresAt.AsTime()) > expirationGraceDays {
+				s.logger.Debug("not considering expired image, skipping", "id", img.Id)
 				continue
 			}
 		}
 
-		os, ver, err := utils.GetOsAndSemver(*img.ID)
+		os, ver, err := utils.GetOsAndSemver(img.Id)
 		if err != nil {
-			s.logger.Error("could not extract os and version, skipping", "image", img.ID, "error", err)
+			s.logger.Error("could not extract os and version, skipping", "image", img.Id, "error", err)
 			continue
 		}
 
@@ -85,7 +85,7 @@ func (s *SyncLister) DetermineImageSyncList() ([]api.OS, error) {
 		majorMinor := fmt.Sprintf("%d.%d", ver.Major(), ver.Minor())
 		imageVersions := versions[majorMinor]
 
-		u, err := url.Parse(img.URL)
+		u, err := url.Parse(img.Url)
 		if err != nil {
 			s.logger.Error("image url is invalid, skipping", "error", err)
 			continue
@@ -95,20 +95,20 @@ func (s *SyncLister) DetermineImageSyncList() ([]api.OS, error) {
 
 		s3Image, ok := s3Images[bucketKey]
 		if !ok {
-			s.logger.Error("image is not contained in global image store, skipping", "path", u.Path, "id", *img.ID)
+			s.logger.Error("image is not contained in global image store, skipping", "path", u.Path, "id", img.Id)
 			continue
 		}
 
 		s3MD5, ok := s3Images[bucketKey+".md5"]
 		if !ok {
-			s.logger.Error("image md5 is not contained in global image store, skipping", "path", u.Path, "id", *img.ID)
+			s.logger.Error("image md5 is not contained in global image store, skipping", "path", u.Path, "id", img.Id)
 			continue
 		}
 
 		imageVersions = append(imageVersions, api.OS{
 			Name:       os,
 			Version:    ver,
-			ApiRef:     *img,
+			ApiRef:     img,
 			BucketKey:  bucketKey,
 			BucketName: s.config.ImageBucket,
 			ImageRef:   s3Image,
@@ -120,10 +120,9 @@ func (s *SyncLister) DetermineImageSyncList() ([]api.OS, error) {
 	}
 
 	var sizeCount int64
-	var syncImages []api.OS
+	var syncImages []*api.OS
 	for _, versions := range images {
 		for _, versionedImages := range versions {
-			versionedImages := versionedImages
 			sort.Slice(versionedImages, func(i, j int) bool {
 				return versionedImages[i].Version.GreaterThan(versionedImages[j].Version)
 			})
@@ -134,7 +133,7 @@ func (s *SyncLister) DetermineImageSyncList() ([]api.OS, error) {
 				}
 				amount += 1
 				sizeCount += *img.ImageRef.Size
-				syncImages = append(syncImages, img)
+				syncImages = append(syncImages, &img)
 			}
 		}
 	}
@@ -149,7 +148,7 @@ func (s *SyncLister) DetermineImageSyncList() ([]api.OS, error) {
 		}
 	}
 
-	s.imageCollector.SetUnsyncedImageCount(len(resp.Payload) - len(syncImages))
+	s.imageCollector.SetUnsyncedImageCount(len(resp.Images) - len(syncImages))
 
 	return syncImages, nil
 }
@@ -164,8 +163,8 @@ func (s *SyncLister) isExcluded(url string) bool {
 	return false
 }
 
-func (s *SyncLister) DetermineKernelSyncList() ([]api.Kernel, error) {
-	resp, err := s.client.Partition().ListPartitions(partition.NewListPartitionsParams(), nil)
+func (s *SyncLister) DetermineKernelSyncList(ctx context.Context) ([]api.Kernel, error) {
+	resp, err := s.client.Apiv2().Partition().List(ctx, &apiv2.PartitionServiceListRequest{})
 	if err != nil {
 		return nil, fmt.Errorf("error listing partitions:%w", err)
 	}
@@ -173,12 +172,12 @@ func (s *SyncLister) DetermineKernelSyncList() ([]api.Kernel, error) {
 	var result []api.Kernel
 	urls := map[string]bool{}
 
-	for _, p := range resp.Payload {
-		if p.Bootconfig == nil {
+	for _, p := range resp.Partitions {
+		if p.BootConfiguration == nil {
 			continue
 		}
 
-		kernelURL := p.Bootconfig.Kernelurl
+		kernelURL := p.BootConfiguration.KernelUrl
 
 		if urls[kernelURL] {
 			continue
@@ -211,8 +210,8 @@ func (s *SyncLister) DetermineKernelSyncList() ([]api.Kernel, error) {
 	return result, nil
 }
 
-func (s *SyncLister) DetermineBootImageSyncList() ([]api.BootImage, error) {
-	resp, err := s.client.Partition().ListPartitions(partition.NewListPartitionsParams(), nil)
+func (s *SyncLister) DetermineBootImageSyncList(ctx context.Context) ([]api.BootImage, error) {
+	resp, err := s.client.Apiv2().Partition().List(ctx, &apiv2.PartitionServiceListRequest{})
 	if err != nil {
 		return nil, fmt.Errorf("error listing partitions:%w", err)
 	}
@@ -220,12 +219,12 @@ func (s *SyncLister) DetermineBootImageSyncList() ([]api.BootImage, error) {
 	var result []api.BootImage
 	urls := map[string]bool{}
 
-	for _, p := range resp.Payload {
-		if p.Bootconfig == nil {
+	for _, p := range resp.Partitions {
+		if p.BootConfiguration == nil {
 			continue
 		}
 
-		bootImageURL := p.Bootconfig.Imageurl
+		bootImageURL := p.BootConfiguration.ImageUrl
 
 		if urls[bootImageURL] {
 			continue
@@ -293,8 +292,8 @@ func retrieveContentLength(ctx context.Context, c *http.Client, url string) (int
 	return int64(size), nil // nolint:gosec
 }
 
-func (s *SyncLister) reduce(images []api.OS, sizeCount int64) ([]api.OS, int64, error) {
-	groups := map[string][]api.OS{}
+func (s *SyncLister) reduce(images []*api.OS, sizeCount int64) ([]*api.OS, int64, error) {
+	groups := map[string][]*api.OS{}
 	for _, img := range images {
 		key := fmt.Sprintf("%s-%d.%d", img.Name, img.Version.Major(), img.Version.Minor())
 		groups[key] = append(groups[key], img)
@@ -320,11 +319,11 @@ func (s *SyncLister) reduce(images []api.OS, sizeCount int64) ([]api.OS, int64, 
 	}
 
 	groupImages := groups[biggestGroup]
-	groups[biggestGroup] = append([]api.OS{}, groupImages[1:]...)
+	groups[biggestGroup] = append([]*api.OS{}, groupImages[1:]...)
 
 	newSize := sizeCount - *groupImages[0].ImageRef.Size
 
-	var result []api.OS
+	var result []*api.OS
 	for _, imgs := range groups {
 		result = append(result, imgs...)
 	}

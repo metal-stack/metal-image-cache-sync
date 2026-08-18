@@ -12,10 +12,10 @@ func NewCronLogger(logger *slog.Logger) *CronLogger {
 	}
 }
 
-func (c *CronLogger) Info(msg string, keysAndValues ...interface{}) {
+func (c *CronLogger) Info(msg string, keysAndValues ...any) {
 	c.l.Info(msg, keysAndValues...)
 }
 
-func (c *CronLogger) Error(err error, msg string, keysAndValues ...interface{}) {
+func (c *CronLogger) Error(err error, msg string, keysAndValues ...any) {
 	c.l.Error(msg, keysAndValues...)
 }

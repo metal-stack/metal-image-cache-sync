@@ -3,6 +3,8 @@ package api
 import (
 	"fmt"
 	"path"
+	"slices"
+	"strings"
 
 	"github.com/docker/go-units"
 	"github.com/go-playground/validator/v10"
@@ -57,6 +59,21 @@ func NewConfig() (*Config, error) {
 		DryRun:                    viper.GetBool("dry-run"),
 		ExcludePaths:              viper.GetStringSlice("excludes"),
 		ExpirationGraceDays:       viper.GetUint("expiration-grace-period"),
+	}
+
+	// string slices from env variables are not split by viper: https://github.com/spf13/viper/issues/380
+	if slices.ContainsFunc(c.ExcludePaths, func(path string) bool {
+		return strings.Contains(path, ",")
+	}) {
+		c.ExcludePaths = func() []string {
+			var split []string
+
+			for _, path := range c.ExcludePaths {
+				split = append(split, strings.Split(path, ",")...)
+			}
+
+			return split
+		}()
 	}
 
 	var err error

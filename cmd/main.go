@@ -180,13 +180,9 @@ func run() error {
 		return err
 	}
 
-	cleantoken := strings.TrimSpace(string(token))
-
-	logger.Info("using token", "token", token)
-
 	dialConfig := &apiclient.DialConfig{
 		BaseURL:   c.MetalAPIServerURL,
-		Token:     cleantoken,
+		Token:     strings.TrimSpace(string(token)),
 		UserAgent: "metal-image-cache-sync",
 		Log:       logger,
 		TokenRenewal: &apiclient.TokenRenewal{

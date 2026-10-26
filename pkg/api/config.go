@@ -3,8 +3,6 @@ package api
 import (
 	"fmt"
 	"path"
-	"slices"
-	"strings"
 
 	"github.com/docker/go-units"
 	"github.com/go-playground/validator/v10"
@@ -57,7 +55,7 @@ func NewConfig() (*Config, error) {
 		ImageBucket:               viper.GetString("image-store-bucket"),
 		SyncSchedule:              viper.GetString("schedule"),
 		DryRun:                    viper.GetBool("dry-run"),
-		ExcludePaths:              viperEnvStringSlice("excludes"),
+		ExcludePaths:              viper.GetStringSlice("excludes"),
 		ExpirationGraceDays:       viper.GetUint("expiration-grace-period"),
 	}
 
@@ -118,26 +116,4 @@ func (c *Config) Validate(fs afero.Fs) error {
 	}
 
 	return nil
-}
-
-// viperEnvStringSlice returns a string slice from cobra / viper
-// string slices from env variables are not split by viper: https://github.com/spf13/viper/issues/380
-func viperEnvStringSlice(name string) []string {
-	slice := viper.GetStringSlice("excludes")
-
-	if slices.ContainsFunc(slice, func(path string) bool {
-		return strings.Contains(path, ",")
-	}) {
-		slice = func() []string {
-			var split []string
-
-			for _, path := range slice {
-				split = append(split, strings.Split(path, ",")...)
-			}
-
-			return split
-		}()
-	}
-
-	return slice
 }

@@ -60,7 +60,7 @@ func (s *SyncLister) DetermineImageSyncList(ctx context.Context) ([]*api.OS, err
 	images := api.OSImagesByOS{}
 	for _, img := range resp.Images {
 		if s.isExcluded(img.Url) {
-			s.logger.Debug("skipping image with exclude URL", "id", img.Id)
+			s.logger.Debug("skipping image with exclude URL", "id", img.Id, "url", img.Url)
 			continue
 		}
 
@@ -154,7 +154,8 @@ func (s *SyncLister) DetermineImageSyncList(ctx context.Context) ([]*api.OS, err
 }
 
 func (s *SyncLister) isExcluded(url string) bool {
-	s.logger.Info("checking excludes", "excludes", s.config.ExcludePaths, "url", url)
+	s.logger.Debug("checking excludes", "excludes", s.config.ExcludePaths, "url", url)
+
 	for _, exclude := range s.config.ExcludePaths {
 		if strings.Contains(url, exclude) {
 			return true
